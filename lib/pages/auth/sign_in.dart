@@ -40,7 +40,7 @@ class SignIn extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       GestureDetector(
-                        onTap: () => AuthService(),
+                        onTap: () => AuthService().signInWithGoogle(),
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(20.0, 0, 20.0, 0),
                           child: Image.asset(
