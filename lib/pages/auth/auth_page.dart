@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:yetuga/home.dart';
 import 'package:yetuga/pages/auth/sign_in.dart';
-import 'package:yetuga/pages/registration_forms/input_form.dart';
 
 class AuthPage extends StatelessWidget {
   const AuthPage({super.key});
@@ -13,7 +13,7 @@ class AuthPage extends StatelessWidget {
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
           if (snapshot.hasData) {
-            return const InputForms();
+            return HomePage();
           } else {
             return SignIn();
           }
