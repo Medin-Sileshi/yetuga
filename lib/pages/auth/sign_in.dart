@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:yetuga/pages/auth/auth_page.dart';
+import 'package:yetuga/services/auth_service.dart';
 
 class SignIn extends StatelessWidget {
   final TextEditingController emailController = TextEditingController();
@@ -40,7 +40,7 @@ class SignIn extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       GestureDetector(
-                        onTap: () => const AuthPage(),
+                        onTap: () => AuthService(),
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(20.0, 0, 20.0, 0),
                           child: Image.asset(
