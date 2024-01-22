@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "273151397649",
+    "project_id": "yetu-ga",
+    "storage_bucket": "yetu-ga.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:273151397649:android:d692a4378231d8018f86b0",
+        "android_client_info": {
+          "package_name": "com.example.yetuga"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyADejVb2XR3VmEeLCO3YPBtRE4iHc6MHlc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
