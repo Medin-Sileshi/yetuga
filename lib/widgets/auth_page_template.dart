@@ -66,8 +66,8 @@ class AuthPageTemplate extends ConsumerWidget {
                           // Logo
                           Image.asset(
                             isDark
-                                ? 'assets/dark/logo_light.png'
-                                : 'assets/light/logo_dark.png',
+                                ? 'assets/dark/logo_dark.png'
+                                : 'assets/light/logo_light.png',
                             height: 60,
                             fit: BoxFit.contain,
                           ),
