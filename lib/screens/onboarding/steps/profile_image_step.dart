@@ -2,19 +2,18 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../../providers/onboarding_provider.dart';
-import '../../../providers/theme_provider.dart';
+import 'package:image_cropper/image_cropper.dart';
+import '../../../providers/onboarding_form_provider.dart';
 import '../../../providers/firebase_provider.dart';
-import '../../../widgets/onboarding_template.dart';
 
 class ProfileImageStep extends ConsumerStatefulWidget {
   final VoidCallback onNext;
-  final VoidCallback onBack;
+  final ValueChanged<bool> onValidityChanged;
 
   const ProfileImageStep({
     super.key,
     required this.onNext,
-    required this.onBack,
+    required this.onValidityChanged,
   });
 
   @override
@@ -22,212 +21,311 @@ class ProfileImageStep extends ConsumerStatefulWidget {
 }
 
 class _ProfileImageStepState extends ConsumerState<ProfileImageStep> {
+  final _imagePicker = ImagePicker();
   File? _imageFile;
+  bool _isUploading = false;
+  String? _errorMessage;
   bool _isLoading = false;
-  String? _error;
+
+  String? _savedImageUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize validity to false
+    widget.onValidityChanged(false);
+    // Load saved image after the widget is fully built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSavedImage();
+    });
+  }
+
+  Future<void> _loadSavedImage() async {
+    try {
+      final formData = ref.read(onboardingFormProvider);
+      final savedImageUrl = formData.profileImageUrl;
+
+      if (savedImageUrl != null && savedImageUrl.isNotEmpty) {
+        setState(() {
+          _isLoading = true;
+          _savedImageUrl = savedImageUrl;
+        });
+
+        // We don't actually load the image here as it would require downloading
+        // Instead, we just mark that an image was previously selected
+        setState(() {
+          _isLoading = false;
+        });
+
+        // Notify parent after state is updated
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            widget.onValidityChanged(true);
+          }
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Failed to load saved image: ${e.toString()}';
+        _isLoading = false;
+      });
+
+      // Notify parent after state is updated
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          widget.onValidityChanged(false);
+        }
+      });
+    }
+  }
 
   Future<void> _pickImage(ImageSource source) async {
     try {
       setState(() {
         _isLoading = true;
-        _error = null;
+        _errorMessage = null;
       });
 
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(
+      final pickedFile = await _imagePicker.pickImage(
         source: source,
-        maxWidth: 1000,
-        maxHeight: 1000,
+        maxWidth: 1024,
+        maxHeight: 1024,
         imageQuality: 85,
       );
 
-      if (image != null) {
-        final file = File(image.path);
-        if (file.lengthSync() > 2 * 1024 * 1024) {
-          // 2MB limit
+      if (pickedFile != null) {
+        try {
+          final croppedFile = await ImageCropper().cropImage(
+            sourcePath: pickedFile.path,
+            aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+            uiSettings: [
+              AndroidUiSettings(
+                toolbarTitle: 'Crop Profile Image',
+                toolbarColor: Colors.blue, // Use a fixed color to avoid BuildContext issues
+                toolbarWidgetColor: Colors.white,
+                initAspectRatio: CropAspectRatioPreset.square,
+                lockAspectRatio: true,
+                hideBottomControls: false,
+                showCropGrid: true,
+              ),
+              IOSUiSettings(
+                title: 'Crop Profile Image',
+                aspectRatioLockEnabled: true,
+              ),
+            ],
+          );
+
+          if (croppedFile != null) {
+            setState(() {
+              _imageFile = File(croppedFile.path);
+              _errorMessage = null;
+              _isLoading = false;
+
+            });
+
+            // Upload the image immediately
+            _uploadImage();
+
+            // Notify parent after state is updated
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                widget.onValidityChanged(true);
+              }
+            });
+          } else {
+            setState(() {
+              _isLoading = false;
+            });
+          }
+        } catch (e) {
+          // If cropping fails, use the original image
           setState(() {
-            _error = 'Image size must be less than 2MB';
+            _imageFile = File(pickedFile.path);
+            _errorMessage = null;
+            _isLoading = false;
+
           });
-          return;
+
+          // Upload the image immediately
+          _uploadImage();
+
+          // Notify parent after state is updated
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              widget.onValidityChanged(true);
+            }
+          });
         }
-
-        // Upload image to Firebase Storage
-        final firebaseService = ref.read(firebaseServiceProvider);
-        final imageUrl = await firebaseService.uploadProfileImage(file);
-
+      } else {
         setState(() {
-          _imageFile = file;
+          _isLoading = false;
         });
-        ref.read(onboardingProvider.notifier).setProfileImage(imageUrl);
       }
     } catch (e) {
       setState(() {
-        _error = 'Failed to pick image. Please try again.';
-      });
-    } finally {
-      setState(() {
+        _errorMessage = 'Failed to pick image: ${e.toString()}';
         _isLoading = false;
+
       });
+
+      // Notify parent after state is updated
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          widget.onValidityChanged(false);
+        }
+      });
+    }
+  }
+
+  void _showImageSourceDialog() {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                key: const Key('take_photo_option'),
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Take Photo'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                key: const Key('choose_photo_option'),
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Choose from Gallery'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _uploadImage() async {
+    if (_imageFile == null) return;
+
+    setState(() {
+      _isUploading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final firebaseService = ref.read(firebaseServiceProvider);
+      final imageUrl = await firebaseService.uploadProfileImage(_imageFile!);
+
+
+
+      setState(() {
+        _savedImageUrl = imageUrl;
+        _isUploading = false;
+      });
+
+      ref.read(onboardingFormProvider.notifier).setProfileImage(imageUrl);
+      print('DEBUG: Profile image URL saved: $imageUrl');
+
+      // Notify parent that the image is valid
+      widget.onValidityChanged(true);
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Failed to upload image: ${e.toString()}';
+        _isUploading = false;
+
+      });
+
+      // Notify parent that the image is not valid
+      widget.onValidityChanged(false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return OnboardingTemplate(
-      title: 'Profile Picture',
-      currentStep: 5,
-      totalSteps: 6,
-      onNext: _imageFile != null ? widget.onNext : null,
-      onBack: widget.onBack,
-      onThemeToggle: () {
-        ref.read(themeProvider.notifier).toggleTheme();
-      },
-      content: Stack(
-        children: [
-          Column(
-            children: [
-              const SizedBox(height: 32),
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
-              // Image preview or placeholder
-              GestureDetector(
-                onTap:
-                    _isLoading ? null : () => _showImageSourceDialog(context),
-                child: Container(
-                  width: 150,
-                  height: 150,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Theme.of(context).colorScheme.surfaceVariant,
-                    image: _imageFile != null
-                        ? DecorationImage(
-                            image: FileImage(_imageFile!),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
-                  ),
-                  child: _imageFile == null
-                      ? Icon(
-                          Icons.add_a_photo,
-                          size: 48,
-                          color: Theme.of(context).colorScheme.primary,
-                        )
-                      : null,
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Error message
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Text(
-                    _error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-
-              const SizedBox(height: 24),
-
-              // Requirements
-              Text(
-                'Requirements:',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              _buildRequirement(
-                'Square image (1:1 ratio)',
-                _imageFile != null,
-              ),
-              _buildRequirement(
-                'Less than 2MB',
-                _imageFile != null &&
-                    _imageFile!.lengthSync() <= 2 * 1024 * 1024,
-              ),
-              _buildRequirement(
-                'High quality (1000x1000)',
-                _imageFile != null,
-              ),
-            ],
-          ),
-
-          // Loading overlay
-          if (_isLoading)
-            Container(
-              color: Colors.black.withOpacity(0.3),
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  void _showImageSourceDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Choose Image Source'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: const Text('Camera'),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.camera);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('Gallery'),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.gallery);
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRequirement(String text, bool isMet) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            isMet ? Icons.check_circle : Icons.circle_outlined,
-            size: 16,
-            color: isMet
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-          ),
-          const SizedBox(width: 8),
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (_isLoading)
+          const Center(
+            key: Key('loading_indicator'),
+            child: CircularProgressIndicator(),
+          )
+        else
+          _buildImageSelector(colorScheme),
+        if (_errorMessage != null) ...[
+          const SizedBox(height: 16),
           Text(
-            text,
-            style: TextStyle(
-              fontSize: 14,
-              color: isMet
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            _errorMessage!,
+            key: const Key('error_message'),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.error,
             ),
+            textAlign: TextAlign.center,
           ),
         ],
+        if (_isUploading) ...[
+          const SizedBox(height: 16),
+          const Center(
+            child: CircularProgressIndicator(),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildImageSelector(ColorScheme colorScheme) {
+    return GestureDetector(
+      key: const Key('image_selector'),
+      onTap: _showImageSourceDialog,
+      child: Container(
+        width: 200,
+        height: 200,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: _imageFile == null ? colorScheme.surfaceContainerHighest : null,
+          image: _imageFile != null
+              ? DecorationImage(
+                  image: FileImage(_imageFile!),
+                  fit: BoxFit.cover,
+                )
+              : null,
+          border: Border.all(
+            color:
+                _imageFile != null ? colorScheme.primary : colorScheme.outline,
+            width: 2,
+          ),
+        ),
+        child: _imageFile == null
+            ? Icon(
+                Icons.add_a_photo,
+                size: 48,
+                color: colorScheme.primary,
+              )
+            : Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withAlpha(128), // 0.5 opacity
+                    ),
+                  ),
+                  const Icon(
+                    Icons.edit,
+                    size: 48,
+                    color: Colors.white,
+                  ),
+                ],
+              ),
       ),
     );
   }

@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../providers/onboarding_provider.dart';
-import '../../../providers/theme_provider.dart';
-import '../../../widgets/onboarding_template.dart';
+import '../../../providers/onboarding_form_provider.dart';
 
 class PhoneStep extends ConsumerStatefulWidget {
   final VoidCallback onNext;
   final VoidCallback onBack;
+  final Function(bool) onValidityChanged;
 
-  const PhoneStep({super.key, required this.onNext, required this.onBack});
+  const PhoneStep({
+    super.key,
+    required this.onNext,
+    required this.onBack,
+    required this.onValidityChanged,
+  });
 
   @override
   ConsumerState<PhoneStep> createState() => _PhoneStepState();
@@ -18,15 +23,14 @@ class _PhoneStepState extends ConsumerState<PhoneStep> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
   String? _error;
+  final String _countryCode = '+251';
+  final String _exampleNumber = '912345678';
+  bool _isValid = false;
 
-  void _validateAndUpdate() {
-    if (_formKey.currentState?.validate() ?? false) {
-      final phoneNumber = _phoneController.text.trim();
-      setState(() {
-        _error = null;
-      });
-      ref.read(onboardingProvider.notifier).setPhoneNumber(phoneNumber);
-    }
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedData();
   }
 
   @override
@@ -35,115 +39,156 @@ class _PhoneStepState extends ConsumerState<PhoneStep> {
     super.dispose();
   }
 
+  void _loadSavedData() {
+    final formData = ref.read(onboardingFormProvider);
+    if (formData.phoneNumber != null) {
+      // Remove country code if it exists in saved data
+      String savedNumber = formData.phoneNumber!;
+      if (savedNumber.startsWith(_countryCode)) {
+        savedNumber = savedNumber.substring(_countryCode.length);
+      }
+      _phoneController.text = savedNumber;
+      _validateInput(savedNumber);
+    }
+  }
+
+  void _validateInput(String value) {
+    bool isValid = value.length == 9 && value.startsWith('9');
+    print('DEBUG: Phone _validateInput called with value: $value, isValid: $isValid');
+    setState(() {
+      _isValid = isValid;
+    });
+    widget.onValidityChanged(isValid);
+    print('DEBUG: Called phone onValidityChanged with: $isValid');
+  }
+
+  // This method is now public so it can be called from the onboarding screen
+  void validateAndSave() {
+    if (_formKey.currentState?.validate() ?? false) {
+      // Get the phone number without any formatting
+      final phoneNumberOnly = _phoneController.text.trim();
+
+      // Make sure it starts with 9 (Ethiopian format)
+      if (!phoneNumberOnly.startsWith('9')) {
+        setState(() {
+          _error = 'Phone number must start with 9';
+        });
+        return;
+      }
+
+      // Combine country code with phone number
+      final fullPhoneNumber = '$_countryCode$phoneNumberOnly';
+      print('DEBUG: Phone number to save: $fullPhoneNumber');
+
+      // Save to provider
+      ref.read(onboardingFormProvider.notifier).setPhoneNumber(fullPhoneNumber);
+      print('DEBUG: Phone number saved: $fullPhoneNumber');
+
+      // Verify the data was saved by reading it back
+      final formData = ref.read(onboardingFormProvider);
+      print('DEBUG: Verification - Phone number in provider: ${formData.phoneNumber}');
+
+      // Call onNext to navigate to the next page
+      widget.onNext();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return OnboardingTemplate(
-      title: 'Your Phone Number',
-      currentStep: 4,
-      totalSteps: 6,
-      onNext:
-          _phoneController.text.isNotEmpty && _error == null
-              ? widget.onNext
-              : null,
-      onBack: widget.onBack,
-      onThemeToggle: () {
-        ref.read(themeProvider.notifier).toggleTheme();
-      },
-      content: Form(
-        key: _formKey,
+    return Form(
+      key: _formKey,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Phone number field
             TextFormField(
               controller: _phoneController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(9),
+              ],
               decoration: InputDecoration(
-                labelText: 'Phone Number',
-                border: const UnderlineInputBorder(),
-                contentPadding: const EdgeInsets.symmetric(vertical: 16),
-                alignLabelWithHint: true,
-                prefixText: '+251 ',
-                hintText: '9XXXXXXXX',
+                label: const Center(child: Text('Phone Number')),
+                labelStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                filled: true,
+                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                prefixText: '🇪🇹 $_countryCode ',
+                prefixStyle: const TextStyle(
+                  fontSize: 16,
+                ),
+                hintText: _exampleNumber,
               ),
               textAlign: TextAlign.center,
-              keyboardType: TextInputType.phone,
+              style: const TextStyle(fontSize: 16),
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'Please enter your phone number';
                 }
-                if (!value.startsWith('9')) {
-                  return 'Phone number must start with 9';
-                }
                 if (value.length != 9) {
                   return 'Phone number must be 9 digits';
+                }
+                if (!value.startsWith('9')) {
+                  return 'Phone number must start with 9';
                 }
                 return null;
               },
               onChanged: (value) {
-                if (_formKey.currentState?.validate() ?? false) {
-                  _validateAndUpdate();
+                setState(() {
+                  _error = null;
+                });
+                _validateInput(value);
+
+                // Save to provider if valid
+                if (_isValid) {
+                  final fullPhoneNumber = '$_countryCode$value';
+                  ref.read(onboardingFormProvider.notifier).setPhoneNumber(fullPhoneNumber);
                 }
               },
+              onFieldSubmitted: (_) => validateAndSave(),
             ),
-
-            const SizedBox(height: 24),
-
-            // Example format
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceVariant,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Example format:',
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '+251 9XXXXXXXX',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Privacy notice
+            Container(height: 1, color: Theme.of(context).dividerColor),
+            const SizedBox(height: 16),
             Text(
-              'Your phone number will be used for:',
-              style: Theme.of(context).textTheme.titleSmall,
+              'Example: 🇪🇹 $_countryCode $_exampleNumber',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color:
+                        Theme.of(context).colorScheme.onSurface.withAlpha(153), // 0.6 opacity
+                  ),
             ),
-            const SizedBox(height: 8),
-            _buildPrivacyItem('Account verification'),
-            _buildPrivacyItem('Password recovery'),
-            _buildPrivacyItem('Important notifications'),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _error!,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildPrivacyItem(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(
-            Icons.check_circle_outline,
-            size: 16,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(width: 8),
-          Text(text, style: Theme.of(context).textTheme.bodyMedium),
-        ],
-      ),
-    );
-  }
+
 }

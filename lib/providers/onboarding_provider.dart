@@ -1,136 +1,208 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import '../models/onboarding_cache.dart';
+import '../models/onboarding_data.dart';
+import 'storage_provider.dart';
 
-class OnboardingState {
-  final String? accountType;
-  final String? displayName;
-  final String? username;
-  final DateTime? birthday;
-  final String? phoneNumber;
-  final String? profileImageUrl;
-  final List<String>? interests;
-  final bool isComplete;
+final onboardingProvider =
+    StateNotifierProvider<OnboardingNotifier, AsyncValue<OnboardingData>>(
+        (ref) {
+  return OnboardingNotifier(ref);
+});
 
-  OnboardingState({
-    this.accountType,
-    this.displayName,
-    this.username,
-    this.birthday,
-    this.phoneNumber,
-    this.profileImageUrl,
-    this.interests,
-    this.isComplete = false,
-  });
+class OnboardingNotifier extends StateNotifier<AsyncValue<OnboardingData>> {
+  final Ref? _ref;
 
-  OnboardingState copyWith({
-    String? accountType,
-    String? displayName,
-    String? username,
-    DateTime? birthday,
-    String? phoneNumber,
-    String? profileImageUrl,
-    List<String>? interests,
-    bool? isComplete,
-  }) {
-    return OnboardingState(
-      accountType: accountType ?? this.accountType,
-      displayName: displayName ?? this.displayName,
-      username: username ?? this.username,
-      birthday: birthday ?? this.birthday,
-      phoneNumber: phoneNumber ?? this.phoneNumber,
-      profileImageUrl: profileImageUrl ?? this.profileImageUrl,
-      interests: interests ?? this.interests,
-      isComplete: isComplete ?? this.isComplete,
-    );
-  }
-}
-
-class OnboardingNotifier extends StateNotifier<OnboardingState> {
-  final Box<OnboardingCache> _box;
-
-  OnboardingNotifier(this._box) : super(OnboardingState()) {
-    _loadFromCache();
-  }
-
-  void _loadFromCache() {
-    final cache = _box.get('onboarding');
-    if (cache != null) {
-      state = OnboardingState(
-        accountType: cache.accountType,
-        displayName: cache.displayName,
-        username: cache.username,
-        birthday: cache.birthday,
-        phoneNumber: cache.phoneNumber,
-        profileImageUrl: cache.profileImageUrl,
-        interests: cache.interests,
-        isComplete: cache.isComplete,
-      );
+  OnboardingNotifier([this._ref]) : super(const AsyncValue.loading()) {
+    // Load data from Hive when the provider is initialized
+    if (_ref != null) {
+      _loadDataFromHive();
     }
   }
 
-  void _saveToCache() {
-    final cache = OnboardingCache(
-      accountType: state.accountType,
-      displayName: state.displayName,
-      username: state.username,
-      birthday: state.birthday,
-      phoneNumber: state.phoneNumber,
-      profileImageUrl: state.profileImageUrl,
-      interests: state.interests,
-      isComplete: state.isComplete,
-    );
-    _box.put('onboarding', cache);
+  Future<void> _loadDataFromHive() async {
+    try {
+      print('DEBUG: OnboardingNotifier: Loading data from Hive...');
+      state = const AsyncValue.loading();
+
+      final storageService = _ref!.read(storageServiceProvider);
+      final data = await storageService.getOnboardingData();
+
+      if (data != null) {
+        print('DEBUG: OnboardingNotifier: Data loaded from Hive: $data');
+        state = AsyncValue.data(data);
+      } else {
+        print('DEBUG: OnboardingNotifier: No data found in Hive, using empty data');
+        state = AsyncValue.data(OnboardingData());
+      }
+    } catch (e) {
+      print('DEBUG: OnboardingNotifier: Error loading data from Hive: $e');
+      state = AsyncValue.error(e, StackTrace.current);
+    }
   }
+
+  // Method to sync data with Firebase
+  Future<void> syncWithFirebase() async {
+    try {
+      print('DEBUG: OnboardingNotifier: Syncing with Firebase...');
+      state = const AsyncValue.loading();
+
+      final storageService = _ref!.read(storageServiceProvider);
+
+      // Force a direct sync with Firebase
+      final userId = storageService.getCurrentUserId();
+      if (userId == null) {
+        print('DEBUG: OnboardingNotifier: No user logged in, cannot sync');
+        state = AsyncValue.data(OnboardingData());
+        return;
+      }
+
+      // First try to get data from Firebase directly
+      print('DEBUG: OnboardingNotifier: Checking Firebase directly...');
+      final firebaseService = storageService.getFirebaseService();
+      final userProfile = await firebaseService.getUserProfile();
+
+      if (userProfile != null) {
+        print('DEBUG: OnboardingNotifier: Found user profile in Firebase: $userProfile');
+
+        // Check if onboarding is completed in Firebase
+        final onboardingCompleted = userProfile['onboardingCompleted'] == true;
+        print('DEBUG: OnboardingNotifier: onboardingCompleted in Firebase: $onboardingCompleted');
+
+        // Create OnboardingData from Firebase data
+        final completedData = OnboardingData()
+          ..accountType = userProfile['accountType']
+          ..displayName = userProfile['displayName']
+          ..username = userProfile['username']
+          ..birthday = userProfile['birthday']?.toDate() // Convert Timestamp to DateTime
+          ..phoneNumber = userProfile['phoneNumber']
+          ..profileImageUrl = userProfile['profileImageUrl']
+          ..interests = List<String>.from(userProfile['interests'] ?? [])
+          ..onboardingCompleted = onboardingCompleted;
+
+        // Save to Hive and update state
+        print('DEBUG: OnboardingNotifier: Saving Firebase data to Hive');
+        await storageService.saveOnboardingData(completedData);
+
+        // Double-check that the data was saved correctly
+        final savedData = await storageService.getOnboardingDataFromHive();
+        print('DEBUG: OnboardingNotifier: Data saved to Hive: $savedData');
+        print('DEBUG: OnboardingNotifier: Is complete: ${savedData?.isComplete()}');
+
+        state = AsyncValue.data(completedData);
+        return;
+      } else {
+        print('DEBUG: OnboardingNotifier: No user profile found in Firebase');
+      }
+
+      // If not found in Firebase, try the normal sync process
+      final data = await storageService.syncWithFirebase(userId);
+
+      if (data != null) {
+        print('DEBUG: OnboardingNotifier: Data synced from Firebase: $data');
+        state = AsyncValue.data(data);
+      } else {
+        print('DEBUG: OnboardingNotifier: No data found in Firebase, using empty data');
+        state = AsyncValue.data(OnboardingData());
+      }
+    } catch (e) {
+      print('DEBUG: OnboardingNotifier: Error syncing with Firebase: $e');
+      // Don't update state to error to avoid breaking the UI
+      // Just keep the current state
+    }
+  }
+
+  // Simple method to update the state with new data
+  void updateData(OnboardingData data) {
+    state = AsyncValue.data(data);
+  }
+
+  bool get isComplete => state.when(
+        data: (data) => data.isComplete(),
+        loading: () => false,
+        error: (_, __) => false,
+      );
 
   void setAccountType(String type) {
-    state = state.copyWith(accountType: type);
-    _saveToCache();
+    state.whenData((data) {
+      data.accountType = type;
+      updateData(data);
+    });
   }
 
-  void setDisplayName(String name, String username) {
-    state = state.copyWith(displayName: name, username: username);
-    _saveToCache();
+  void setDisplayName(String name) {
+    state.whenData((data) {
+      data.displayName = name;
+      updateData(data);
+    });
   }
 
   void setUsername(String username) {
-    state = state.copyWith(username: username);
-    _saveToCache();
+    state.whenData((data) {
+      data.username = username;
+      updateData(data);
+    });
   }
 
-  void setBirthday(DateTime date) {
-    state = state.copyWith(birthday: date);
-    _saveToCache();
+  void setBirthday(DateTime birthday) {
+    state.whenData((data) {
+      data.birthday = birthday;
+      updateData(data);
+    });
   }
 
-  void setPhoneNumber(String number) {
-    state = state.copyWith(phoneNumber: number);
-    _saveToCache();
+  void setPhoneNumber(String phone) {
+    state.whenData((data) {
+      data.phoneNumber = phone;
+      updateData(data);
+    });
   }
 
-  void setProfileImage(String url) {
-    state = state.copyWith(profileImageUrl: url);
-    _saveToCache();
+  void setProfileImage(String imageUrl) {
+    state.whenData((data) {
+      data.profileImageUrl = imageUrl;
+      updateData(data);
+    });
   }
 
   void setInterests(List<String> interests) {
-    state = state.copyWith(interests: interests);
-    _saveToCache();
+    state.whenData((data) {
+      data.interests = interests;
+      updateData(data);
+    });
   }
 
-  void completeOnboarding() {
-    state = state.copyWith(isComplete: true);
-    _saveToCache();
+  // Method to save all data at once (for final submission)
+  Future<void> saveData(OnboardingData data) async {
+    try {
+      // Update the state first
+      updateData(data);
+
+      // Then save to Hive using the storage service
+      if (_ref != null) {
+        final storageService = _ref.read(storageServiceProvider);
+        await storageService.saveOnboardingData(data);
+        print('DEBUG: Successfully saved to Hive');
+      } else {
+        print('DEBUG: Ref is null, skipping Hive save');
+      }
+      return Future.value();
+    } catch (e) {
+      print('DEBUG: Error saving to Hive: $e');
+      throw Exception('Failed to save to Hive: $e');
+    }
   }
 
-  void resetOnboarding() {
-    state = OnboardingState();
-    _box.delete('onboarding');
+  Future<void> clearData() async {
+    state = AsyncValue.data(OnboardingData());
+
+    // Also clear data from Hive
+    if (_ref != null) {
+      try {
+        final storageService = _ref.read(storageServiceProvider);
+        await storageService.clearOnboardingData();
+        print('DEBUG: Successfully cleared data from Hive');
+      } catch (e) {
+        print('DEBUG: Error clearing data from Hive: $e');
+      }
+    }
   }
 }
-
-final onboardingProvider =
-    StateNotifierProvider<OnboardingNotifier, OnboardingState>((ref) {
-  final box = Hive.box<OnboardingCache>('onboarding');
-  return OnboardingNotifier(box);
-});

@@ -3,24 +3,51 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ThemeNotifier extends StateNotifier<ThemeMode> {
-  ThemeNotifier() : super(ThemeMode.light) {
+  ThemeNotifier() : super(ThemeMode.system) {
     _loadTheme();
   }
 
   static const String _themePreferenceKey = 'theme_preference';
+  static const String _useSystemThemeKey = 'use_system_theme';
 
   Future<void> _loadTheme() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final bool isDarkMode = prefs.getBool(_themePreferenceKey) ?? false;
-    state = isDarkMode ? ThemeMode.dark : ThemeMode.light;
+
+    // Check if we should use system theme
+    final bool useSystemTheme = prefs.getBool(_useSystemThemeKey) ?? true;
+
+    if (useSystemTheme) {
+      // Use system theme
+      state = ThemeMode.system;
+    } else {
+      // Use saved theme preference
+      final bool isDarkMode = prefs.getBool(_themePreferenceKey) ?? false;
+      state = isDarkMode ? ThemeMode.dark : ThemeMode.light;
+    }
   }
 
   Future<void> toggleTheme() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final bool isDarkMode = state == ThemeMode.dark;
 
+    // If currently using system theme, switch to light theme
+    if (state == ThemeMode.system) {
+      await prefs.setBool(_useSystemThemeKey, false);
+      await prefs.setBool(_themePreferenceKey, false); // Set to light theme
+      state = ThemeMode.light;
+      return;
+    }
+
+    // Otherwise toggle between light and dark
+    final bool isDarkMode = state == ThemeMode.dark;
+    await prefs.setBool(_useSystemThemeKey, false); // Disable system theme
     await prefs.setBool(_themePreferenceKey, !isDarkMode);
     state = isDarkMode ? ThemeMode.light : ThemeMode.dark;
+  }
+
+  Future<void> useSystemTheme() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_useSystemThemeKey, true);
+    state = ThemeMode.system;
   }
 }
 
@@ -32,10 +59,9 @@ final themeProvider = StateNotifierProvider<ThemeNotifier, ThemeMode>((ref) {
 final lightTheme = ThemeData(
   brightness: Brightness.light,
   primaryColor: const Color(0xFF00182C),
-  colorScheme: ColorScheme.light(
-    primary: const Color(0xFF00182C),
-    secondary: const Color(0xFF00182C),
-    background: Colors.white,
+  colorScheme: const ColorScheme.light(
+    primary: Color(0xFF00182C),
+    secondary: Color(0xFF00182C),
     surface: Colors.white,
   ),
   scaffoldBackgroundColor: Colors.white,
@@ -85,11 +111,10 @@ final lightTheme = ThemeData(
 final darkTheme = ThemeData(
   brightness: Brightness.dark,
   primaryColor: const Color(0xFF29C7E4),
-  colorScheme: ColorScheme.dark(
-    primary: const Color(0xFF29C7E4),
-    secondary: const Color(0xFF29C7E4),
-    background: const Color(0xFF00182C),
-    surface: const Color(0xFF00182C),
+  colorScheme: const ColorScheme.dark(
+    primary: Color(0xFF29C7E4),
+    secondary: Color(0xFF29C7E4),
+    surface: Color(0xFF00182C),
   ),
   scaffoldBackgroundColor: const Color(0xFF00182C),
   appBarTheme: const AppBarTheme(

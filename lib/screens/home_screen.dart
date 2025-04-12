@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_provider.dart';
-import '../providers/theme_provider.dart';
 import 'auth/auth_screen.dart';
+import 'settings/theme_settings_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -33,16 +33,21 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
-    final themeMode = ref.watch(themeProvider);
-    final isDark = themeMode == ThemeMode.dark;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Home'),
         actions: [
           IconButton(
-            icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
-            onPressed: () => ref.read(themeProvider.notifier).toggleTheme(),
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ThemeSettingsScreen(),
+                ),
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.logout),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:form_validator/form_validator.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/firebase_provider.dart';
+import '../../models/onboarding_data.dart';
 import '../../widgets/auth_page_template.dart';
 import '../home_screen.dart';
 import '../onboarding/onboarding_screen.dart';
@@ -45,17 +47,110 @@ class _EmailSignInScreenState extends ConsumerState<EmailSignInScreen> {
           );
 
       if (mounted) {
-        // Check onboarding status and navigate accordingly
-        final onboardingState = ref.read(onboardingProvider);
-        if (onboardingState.isComplete) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
-            (route) => false,
-          );
-        } else {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const OnboardingScreen()),
-            (route) => false,
+        // Show loading dialog for checking onboarding status
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const AlertDialog(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Checking onboarding status...'),
+              ],
+            ),
+          ),
+        );
+
+        try {
+          // Check Firebase directly for onboarding status
+          final firebaseService = ref.read(firebaseServiceProvider);
+          final userProfile = await firebaseService.getUserProfile();
+          print('DEBUG: User profile from Firebase: $userProfile');
+
+          // Close the loading dialog
+          if (context.mounted) {
+            Navigator.of(context).pop();
+          }
+
+          if (userProfile != null && userProfile['onboardingCompleted'] == true) {
+            print('DEBUG: Onboarding is completed in Firebase, navigating to home screen');
+
+            // Update Hive with the onboarding data from Firebase
+            try {
+              print('DEBUG: Updating Hive with onboarding data from Firebase');
+              final onboardingNotifier = ref.read(onboardingProvider.notifier);
+
+              // Create a new OnboardingData object with the data from Firebase
+              final onboardingData = OnboardingData()
+                ..accountType = userProfile['accountType']
+                ..displayName = userProfile['displayName']
+                ..username = userProfile['username']
+                ..birthday = userProfile['birthday']?.toDate() // Convert Timestamp to DateTime
+                ..phoneNumber = userProfile['phoneNumber']
+                ..profileImageUrl = userProfile['profileImageUrl']
+                ..interests = List<String>.from(userProfile['interests'] ?? [])
+                ..onboardingCompleted = true;
+
+              // Save to Hive
+              await onboardingNotifier.saveData(onboardingData);
+              print('DEBUG: Successfully updated Hive with onboarding data from Firebase');
+            } catch (e) {
+              print('DEBUG: Error updating Hive: $e');
+              // Continue even if there's an error updating Hive
+            }
+
+            if (context.mounted) {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const HomeScreen()),
+                (route) => false,
+              );
+            }
+          } else {
+            print('DEBUG: Onboarding is not completed in Firebase, navigating to onboarding screen');
+            if (context.mounted) {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const OnboardingScreen()),
+                (route) => false,
+              );
+            }
+          }
+        } catch (e) {
+          print('DEBUG: Error checking Firebase for onboarding status: $e');
+          // Close the loading dialog if it's still open
+          if (context.mounted) {
+            Navigator.of(context).pop();
+          }
+
+          // Fall back to checking the onboarding provider
+          final onboardingState = ref.read(onboardingProvider);
+          onboardingState.when(
+            data: (data) {
+              if (data.isComplete()) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const HomeScreen()),
+                  (route) => false,
+                );
+              } else {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const OnboardingScreen()),
+                  (route) => false,
+                );
+              }
+            },
+            loading: () {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const OnboardingScreen()),
+                (route) => false,
+              );
+            },
+            error: (error, stack) {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const OnboardingScreen()),
+                (route) => false,
+              );
+            },
           );
         }
       }

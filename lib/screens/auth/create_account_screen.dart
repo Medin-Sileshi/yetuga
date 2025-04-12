@@ -72,17 +72,34 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
 
         // Check onboarding status and navigate accordingly
         final onboardingState = ref.read(onboardingProvider);
-        if (onboardingState.isComplete) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
-            (route) => false,
-          );
-        } else {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const OnboardingScreen()),
-            (route) => false,
-          );
-        }
+        onboardingState.when(
+          data: (data) {
+            if (data.isComplete()) {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const HomeScreen()),
+                (route) => false,
+              );
+            } else {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(
+                    builder: (context) => const OnboardingScreen()),
+                (route) => false,
+              );
+            }
+          },
+          loading: () {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const OnboardingScreen()),
+              (route) => false,
+            );
+          },
+          error: (error, stack) {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const OnboardingScreen()),
+              (route) => false,
+            );
+          },
+        );
       }
     } catch (e) {
       if (mounted) {

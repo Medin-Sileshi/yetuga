@@ -64,7 +64,16 @@ class AuthService {
   // Sign out
   Future<void> signOut() async {
     try {
-      await googleSignInService.signOut();
+      // Sign out from Google if signed in with Google
+      try {
+        await googleSignInService.signOut();
+      } catch (e) {
+        print('Error signing out from Google: $e');
+        // Continue with Firebase sign out even if Google sign out fails
+      }
+
+      // Sign out from Firebase
+      await _auth.signOut();
       print('User signed out successfully');
     } catch (e) {
       print('Error signing out: $e');

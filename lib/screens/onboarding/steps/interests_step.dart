@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../providers/onboarding_provider.dart';
-import '../../../providers/theme_provider.dart';
-import '../../../providers/firebase_provider.dart';
-import '../../../widgets/onboarding_template.dart';
+import '../../../providers/onboarding_form_provider.dart';
 
 class InterestsStep extends ConsumerStatefulWidget {
   final VoidCallback onNext;
@@ -20,25 +17,46 @@ class InterestsStep extends ConsumerStatefulWidget {
 }
 
 class _InterestsStepState extends ConsumerState<InterestsStep> {
-  bool _isSubmitting = false;
+  final List<String> _selectedInterests = [];
+  final bool _isLoading = false;
   String? _error;
 
+  // Define interests list at the top of the class
   final List<String> _interests = [
+    'Adventure',
+    'Art',
+    'Books',
+    'Cars',
+    'Cooking',
+    'Dancing',
+    'Debating',
+    'Movies',
+    'Music',
+    'Sport',
+    'TV',
+    'Walking',
     'Technology',
-    'Business',
-    'Education',
-    'Health',
-    'Sports',
-    'Entertainment',
-    'Food',
     'Travel',
     'Fashion',
-    'Art',
-    'Music',
-    'Science',
+    'Gaming',
+    'Fitness',
+    'Photography',
   ];
 
-  Set<String> _selectedInterests = {};
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedData();
+  }
+
+  void _loadSavedData() {
+    final formData = ref.read(onboardingFormProvider);
+    if (formData.interests != null) {
+      setState(() {
+        _selectedInterests.addAll(formData.interests!);
+      });
+    }
+  }
 
   void _toggleInterest(String interest) {
     setState(() {
@@ -47,185 +65,90 @@ class _InterestsStepState extends ConsumerState<InterestsStep> {
       } else {
         _selectedInterests.add(interest);
       }
-    });
-  }
-
-  Future<void> _submitOnboarding() async {
-    if (_selectedInterests.isEmpty) return;
-
-    setState(() {
-      _isSubmitting = true;
       _error = null;
     });
 
-    try {
-      final onboardingData = ref.read(onboardingProvider);
-      final firebaseService = ref.read(firebaseServiceProvider);
-
-      // Save user profile data to Firebase
-      await firebaseService.saveUserProfile(
-        accountType: onboardingData.accountType,
-        displayName: onboardingData.displayName,
-        username: onboardingData.username,
-        birthday: onboardingData.birthday,
-        phoneNumber: onboardingData.phoneNumber,
-        profileImageUrl: onboardingData.profileImageUrl,
-        interests: _selectedInterests.toList(),
-      );
-
-      // Mark onboarding as complete
-      ref.read(onboardingProvider.notifier).completeOnboarding();
-
-      // Navigate to home screen
-      widget.onNext();
-    } catch (e) {
-      setState(() {
-        _error = 'Failed to save profile. Please try again.';
-      });
-    } finally {
-      setState(() {
-        _isSubmitting = false;
-      });
-    }
+    // Save interests to form provider
+    ref.read(onboardingFormProvider.notifier).setInterests(_selectedInterests);
+    print('DEBUG: Interests selected: $_selectedInterests');
   }
+
+
 
   @override
   Widget build(BuildContext context) {
-    return OnboardingTemplate(
-      title: 'Your Interests',
-      currentStep: 6,
-      totalSteps: 6,
-      onNext: _selectedInterests.isNotEmpty ? _submitOnboarding : null,
-      onBack: widget.onBack,
-      onThemeToggle: () {
-        ref.read(themeProvider.notifier).toggleTheme();
-      },
-      content: Stack(
-        children: [
-          Column(
-            children: [
-              const SizedBox(height: 32),
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
-              // Error message
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Text(
-                    _error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-
-              const SizedBox(height: 24),
-
-              // Selected interests count
-              Text(
-                '${_selectedInterests.length} interests selected',
-                style: Theme.of(context).textTheme.titleSmall,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const SizedBox(height: 150),
+        Expanded(
+          child: Scrollbar(
+            thumbVisibility: true,
+            thickness: 2,
+            radius: const Radius.circular(10),
+            child: GridView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                childAspectRatio: 2.0, // Adjusted for larger text
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
               ),
-
-              const SizedBox(height: 24),
-
-              // Interests grid
-              Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 2.5,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                  ),
-                  itemCount: _interests.length,
-                  itemBuilder: (context, index) {
-                    final interest = _interests[index];
-                    final isSelected = _selectedInterests.contains(interest);
-                    return InkWell(
-                      onTap: () => _toggleInterest(interest),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        decoration: BoxDecoration(
+              itemCount: _interests.length,
+              itemBuilder: (context, index) {
+                final interest = _interests[index];
+                final isSelected = _selectedInterests.contains(interest);
+                return GestureDetector(
+                  onTap: () => _toggleInterest(interest),
+                  child: Container(
+                    
+                    child: Center(
+                      child: Text(
+                        interest,
+                        style: TextStyle(
                           color: isSelected
-                              ? Theme.of(context).colorScheme.primary
-                              : Theme.of(context).colorScheme.surfaceVariant,
-                          borderRadius: BorderRadius.circular(8),
+                              ? colorScheme.primary
+                              : colorScheme.onSurface.withAlpha(179), // 0.7 opacity
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontSize: 16, // Increased font size
                         ),
-                        child: Center(
-                          child: Text(
-                            interest,
-                            style: TextStyle(
-                              color: isSelected
-                                  ? Theme.of(context).colorScheme.onPrimary
-                                  : Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                              fontWeight: isSelected ? FontWeight.bold : null,
-                            ),
-                          ),
-                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    );
-                  },
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Requirements
-              Text(
-                'Requirements:',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              _buildRequirement(
-                'Select at least one interest',
-                _selectedInterests.isNotEmpty,
-              ),
-            ],
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
-
-          // Loading overlay
-          if (_isSubmitting)
-            Container(
-              color: Colors.black.withOpacity(0.3),
-              child: const Center(
-                child: CircularProgressIndicator(),
+        ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              _error!,
+              style: TextStyle(
+                color: colorScheme.error,
+                fontSize: 32,
               ),
             ),
-        ],
-      ),
+          ),
+        if (_isLoading)
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Center(
+              child: CircularProgressIndicator(),
+            ),
+          ),
+      ],
     );
   }
 
-  Widget _buildRequirement(String text, bool isMet) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            isMet ? Icons.check_circle : Icons.circle_outlined,
-            size: 16,
-            color: isMet
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 14,
-              color: isMet
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // Interests list moved to the top of the class
 }

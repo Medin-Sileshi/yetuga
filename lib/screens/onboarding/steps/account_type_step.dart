@@ -1,128 +1,132 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../providers/auth_provider.dart';
-import '../../../providers/onboarding_provider.dart';
-import '../../../providers/theme_provider.dart';
-import '../../../widgets/onboarding_template.dart';
+import '../../../providers/onboarding_form_provider.dart';
 
 class AccountTypeStep extends ConsumerStatefulWidget {
   final VoidCallback onNext;
+  final VoidCallback onBack;
+  final String backButtonLabel;
 
-  const AccountTypeStep({super.key, required this.onNext});
+  const AccountTypeStep({
+    super.key,
+    required this.onNext,
+    required this.onBack,
+    required this.backButtonLabel,
+  });
 
   @override
   ConsumerState<AccountTypeStep> createState() => _AccountTypeStepState();
 }
 
 class _AccountTypeStepState extends ConsumerState<AccountTypeStep> {
-  String? selectedType;
-  String? description;
+  String? _selectedType;
+  String? _selectedDescription;
 
-  void _selectAccountType(String type) {
-    setState(() {
-      selectedType = type;
-      description = type == 'personal'
-          ? 'Free account for adventurous individuals'
-          : 'A paid account with features tailor-made for Businesses';
-    });
-    ref.read(onboardingProvider.notifier).setAccountType(type);
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedData();
   }
 
-  Future<void> _handleSignOut() async {
-    try {
-      await ref.read(authProvider.notifier).signOut();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error signing out: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+  void _loadSavedData() {
+    final formData = ref.read(onboardingFormProvider);
+    if (formData.accountType != null) {
+      setState(() {
+        _selectedType = formData.accountType;
+        _selectedDescription = _getDescription(formData.accountType!);
+      });
     }
+  }
+
+  String _getDescription(String type) {
+    switch (type) {
+      case 'personal':
+        return 'Perfect for individual users who want to connect with others and share their experiences.';
+      case 'business':
+        return 'Ideal for businesses looking to establish their presence and engage with customers.';
+      default:
+        return '';
+    }
+  }
+
+  void _selectType(String type) {
+    setState(() {
+      _selectedType = type;
+      _selectedDescription = _getDescription(type);
+    });
+
+    // Update the form provider
+    ref.read(onboardingFormProvider.notifier).setAccountType(type);
+    print('DEBUG: Account type selected: $type');
+
+    // Force a rebuild of the parent widget to update the Next button
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        // This will force the parent to rebuild
+        setState(() {});
+
+        // Try to trigger the next button directly
+        if (_selectedType != null && _selectedType!.isNotEmpty) {
+          print('DEBUG: Trying to force next button update');
+          // This is a hack to force the parent to check the form data again
+          final formData = ref.read(onboardingFormProvider);
+          if (formData.accountType != null && formData.accountType!.isNotEmpty) {
+            print('DEBUG: Account type is set in form data: ${formData.accountType}');
+          }
+        }
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return OnboardingTemplate(
-      title: 'Choose Account Type',
-      currentStep: 1,
-      totalSteps: 6,
-      onNext: selectedType != null ? widget.onNext : null,
-      onBack: _handleSignOut,
-      backButtonLabel: 'Sign Out',
-      onThemeToggle: () {
-        ref.read(themeProvider.notifier).toggleTheme();
-      },
-      content: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(height: 80),
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
 
-          // Account type buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildAccountTypeButton('Personal', 'personal', context),
-              _buildAccountTypeButton('Business', 'business', context),
-            ],
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildTypeButton('Personal', 'personal'),
+            const SizedBox(width: 16),
+            _buildTypeButton('Business', 'business'),
+          ],
+        ),
+        if (_selectedDescription != null) ...[
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              _selectedDescription!,
+              style: Theme.of(context).textTheme.bodyLarge,
+              textAlign: TextAlign.center,
+            ),
           ),
 
-          // Animated description
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            child: description != null
-                ? Padding(
-                    padding: const EdgeInsets.all(32.0),
-                    child: Text(
-                      description!,
-                      key: ValueKey(description),
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: Theme.of(context).colorScheme.primary,
-                            fontSize: 16,
-                          ),
-                    ),
-                  )
-                : const SizedBox(height: 96),
-          ),
         ],
-      ),
+      ],
     );
   }
 
-  Widget _buildAccountTypeButton(
-    String label,
-    String type,
-    BuildContext context,
-  ) {
-    final isSelected = selectedType == type;
+  Widget _buildTypeButton(String label, String type) {
+    final isSelected = _selectedType == type;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return TextButton(
-      onPressed: () => _selectAccountType(type),
+      onPressed: () => _selectType(type),
       style: TextButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-        backgroundColor: isSelected
-            ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
-            : Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(
-            color: isSelected
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.primary.withOpacity(0.3),
-            width: 1,
-          ),
-        ),
       ),
       child: Text(
         label,
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.primary,
-          fontSize: 18,
-          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-        ),
+        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              color: isSelected ? colorScheme.primary : null,
+            ),
       ),
     );
   }
