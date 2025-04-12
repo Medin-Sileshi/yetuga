@@ -176,8 +176,8 @@ class AuthScreen extends ConsumerWidget {
         onTap: () => _handleGoogleSignIn(context, ref),
         child: Image.asset(
           isDark
-              ? 'assets/dark/signin_with_google_dark.png'
-              : 'assets/light/signin_with_google_light.png',
+              ? 'assets/dark/signin_with_google_light.png'
+              : 'assets/light/signin_with_google_dark.png',
           height: 80,
           fit: BoxFit.contain,
         ),
