@@ -87,8 +87,25 @@ class _DisplayNameStepState extends ConsumerState<DisplayNameStep> {
     // Convert to lowercase and remove spaces
     String username = name.toLowerCase().replaceAll(' ', '');
 
-    // Remove any non-alphanumeric characters
-    username = username.replaceAll(RegExp(r'[^\w\s]+'), '');
+    // Remove any non-alphanumeric characters except underscores
+    // First replace underscores with a placeholder
+    username = username.replaceAll('_', 'UNDERSCORE_PLACEHOLDER');
+
+    // Remove all non-alphanumeric characters
+    username = username.replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+    // Restore underscores
+    username = username.replaceAll('UNDERSCOREPLACEHOLDER', '_');
+
+    // Trim to 15 characters if needed
+    if (username.length > 15) {
+      username = username.substring(0, 15);
+    }
+
+    // Ensure it's at least 2 characters
+    if (username.length < 2) {
+      username = username.padRight(2, '0');
+    }
 
     setState(() {
       _usernameController.text = username;
@@ -136,12 +153,25 @@ class _DisplayNameStepState extends ConsumerState<DisplayNameStep> {
       return;
     }
 
+    // Trim any whitespace
+    username = username.trim();
+
     // Validate username format - now allowing underscores
-    if (!RegExp(r'^[a-z0-9_]{2,15}$').hasMatch(username)) {
+    if (username.length < 2 || username.length > 15) {
       setState(() {
         _isUsernameValid = false;
-        _error =
-            'Username must be 2-15 characters long and contain only lowercase letters, numbers, and underscores';
+        _error = 'Username must be 2-15 characters long';
+        _isNextButtonEnabled = false;
+        _isCheckingUsername = false;
+      });
+      _notifyValidityChanged(false);
+      return;
+    }
+
+    if (!RegExp(r'^[a-z0-9_]+$').hasMatch(username)) {
+      setState(() {
+        _isUsernameValid = false;
+        _error = 'Username must contain only lowercase letters, numbers, and underscores';
         _isNextButtonEnabled = false;
         _isCheckingUsername = false;
       });

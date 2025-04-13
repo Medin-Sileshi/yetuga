@@ -62,7 +62,16 @@ class FirebaseService {
       }
 
       // Validate username format - allow lowercase letters, numbers, and underscores
-      if (!RegExp(r'^[a-z0-9_]{2,15}$').hasMatch(username)) {
+      // First trim any whitespace
+      username = username.trim();
+
+      // Check length
+      if (username.length < 2 || username.length > 15) {
+        throw Exception('Invalid username format - must be 2-15 characters and contain only lowercase letters, numbers, and underscores');
+      }
+
+      // Check characters
+      if (!RegExp(r'^[a-z0-9_]+$').hasMatch(username)) {
         throw Exception('Invalid username format - must be 2-15 characters and contain only lowercase letters, numbers, and underscores');
       }
 
