@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:yetuga/utils/logger.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+
+import '../utils/logger.dart';
 
 class GoogleSignInService {
   // Get Firebase Auth instance

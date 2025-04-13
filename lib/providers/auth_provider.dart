@@ -1,7 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:yetuga/utils/logger.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../services/auth_service.dart';
+import '../utils/logger.dart';
 
 class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   final FirebaseAuth _auth = FirebaseAuth.instance;

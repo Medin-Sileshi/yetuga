@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:yetuga/utils/logger.dart';
+
 import '../models/onboarding_data.dart';
+import '../utils/logger.dart';
 import 'storage_provider.dart';
 
 final onboardingProvider =

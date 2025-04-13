@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:yetuga/utils/logger.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+
 import 'firebase_options.dart';
 import 'models/onboarding_data.dart';
 import 'models/onboarding_cache.dart';
@@ -13,6 +13,7 @@ import 'screens/home_screen.dart';
 import 'screens/onboarding/onboarding_screen.dart';
 import 'providers/theme_provider.dart';
 import 'theme/app_theme.dart';
+import 'utils/logger.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:yetuga/utils/logger.dart';
+
+import '../utils/logger.dart';
 import 'google_sign_in_service.dart';
 
 class AuthService {

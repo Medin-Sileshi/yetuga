@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:yetuga/utils/logger.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:yetuga/providers/onboarding_provider.dart';
 import 'package:yetuga/screens/onboarding/onboarding_screen.dart';
 import '../../providers/auth_provider.dart';

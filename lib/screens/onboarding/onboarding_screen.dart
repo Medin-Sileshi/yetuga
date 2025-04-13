@@ -1,25 +1,24 @@
-import 'dart:async';
-import 'package:yetuga/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../widgets/onboarding_template.dart';
-import 'steps/account_type_step.dart';
-import 'steps/display_name_step.dart';
-import 'steps/birthday_step.dart';
-import 'steps/phone_step.dart';
-import 'steps/profile_image_step.dart';
-import 'steps/interests_step.dart';
-import 'steps/established_in_step.dart';
-import 'steps/business_type_step.dart';
-import '../../providers/onboarding_provider.dart';
-import '../../providers/onboarding_form_provider.dart';
+
+import '../../providers/auth_provider.dart';
 import '../../providers/business_onboarding_form_provider.dart';
 import '../../providers/firebase_provider.dart';
-import '../../providers/auth_provider.dart';
+import '../../providers/onboarding_form_provider.dart';
+import '../../providers/onboarding_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../../screens/auth/auth_screen.dart';
 import '../../screens/home_screen.dart';
 import '../../utils/logger.dart';
-import '../../screens/auth/auth_screen.dart';
+import '../../widgets/onboarding_template.dart';
+import 'steps/account_type_step.dart';
+import 'steps/birthday_step.dart';
+import 'steps/business_type_step.dart';
+import 'steps/display_name_step.dart';
+import 'steps/established_in_step.dart';
+import 'steps/interests_step.dart';
+import 'steps/phone_step.dart';
+import 'steps/profile_image_step.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});

@@ -1,9 +1,9 @@
-import 'package:hive_flutter/hive_flutter.dart';
-import 'package:yetuga/utils/logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+
 import '../models/onboarding_data.dart';
 import '../utils/logger.dart';
-import '../services/firebase_service.dart';
+import 'firebase_service.dart';
 
 class StorageService {
   static const String _onboardingBoxName = 'onboarding';

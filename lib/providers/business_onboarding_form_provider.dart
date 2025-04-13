@@ -1,8 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:yetuga/utils/logger.dart';
+
 import '../models/business_onboarding_data.dart';
 import 'base_form_notifier.dart';
-import '../utils/logger.dart';
 
 /// Provider that stores business onboarding form data in memory only
 /// This avoids the need to save to Hive after each step

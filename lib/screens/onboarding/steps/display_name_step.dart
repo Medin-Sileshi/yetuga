@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:yetuga/utils/logger.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../providers/onboarding_form_provider.dart';
+
 import '../../../providers/business_onboarding_form_provider.dart';
 import '../../../providers/firebase_provider.dart';
+import '../../../providers/onboarding_form_provider.dart';
+import '../../../utils/logger.dart';
 
 class DisplayNameStep extends ConsumerStatefulWidget {
   final VoidCallback onNext;
@@ -27,7 +28,6 @@ class _DisplayNameStepState extends ConsumerState<DisplayNameStep> {
   final _usernameController = TextEditingController();
   bool _isEditingUsername = false;
   bool _isCheckingUsername = false;
-  bool _isUsernameTaken = false;
   bool _isUsernameValid = false;
   bool _isNextButtonEnabled = false;
   String? _error;
@@ -190,7 +190,6 @@ class _DisplayNameStepState extends ConsumerState<DisplayNameStep> {
       final isAvailable = await firebaseService.isUsernameAvailable(username);
 
       setState(() {
-        _isUsernameTaken = !isAvailable;
         _isUsernameValid = isAvailable;
         _error = isAvailable ? null : 'Username is already taken';
         _isEditingUsername = false;

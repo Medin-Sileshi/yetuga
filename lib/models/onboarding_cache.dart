@@ -1,5 +1,4 @@
 import 'package:hive/hive.dart';
-import 'package:yetuga/utils/logger.dart';
 
 part 'onboarding_cache.g.dart';
 

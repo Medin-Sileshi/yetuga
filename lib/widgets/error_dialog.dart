@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:yetuga/utils/logger.dart';
 
 class ErrorDialog extends StatelessWidget {
   final String title;
