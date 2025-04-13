@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yetuga/utils/logger.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -16,6 +17,11 @@ import 'theme/app_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Disable debug logs in production to prevent memory issues
+  // Only enable in development
+  const bool isProduction = bool.fromEnvironment('dart.vm.product');
+  Logger.setDebugLogsEnabled(!isProduction);
+
   // Initialize Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
@@ -30,20 +36,20 @@ void main() async {
 
   // Clear Hive boxes to force a fresh sync with Firebase
   try {
-    print('DEBUG: Clearing Hive boxes to force a fresh sync with Firebase');
+    Logger.d('Main', 'Clearing Hive boxes to force a fresh sync with Firebase');
     await Hive.deleteBoxFromDisk('onboarding');
     await Hive.deleteBoxFromDisk('onboarding_cache');
   } catch (e) {
-    print('DEBUG: Error clearing Hive boxes: $e');
+    Logger.d('Main', 'Error clearing Hive boxes: $e');
   }
 
   // Open the boxes
   try {
     await Hive.openBox<OnboardingData>('onboarding');
     await Hive.openBox<OnboardingCache>('onboarding_cache');
-    print('DEBUG: Hive boxes opened successfully');
+    Logger.d('Main', 'Hive boxes opened successfully');
   } catch (e) {
-    print('DEBUG: Error opening Hive boxes: $e');
+    Logger.d('Main', 'Error opening Hive boxes: $e');
   }
 
   runApp(const ProviderScope(child: MyApp()));
@@ -73,34 +79,34 @@ class _MyAppState extends ConsumerState<MyApp> {
 
   Future<void> _checkAuthAndOnboardingStatus() async {
     try {
-      print('DEBUG: Checking auth and onboarding status');
+      Logger.d('Main', 'Checking auth and onboarding status');
       // Check if user is authenticated
       final user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
-        print('DEBUG: No user logged in');
+        Logger.d('Main', 'No user logged in');
         // User is not authenticated, navigate to auth screen
         setState(() {
           _isLoading = false;
         });
       } else {
-        print('DEBUG: User is logged in: ${user.uid}');
+        Logger.d('Main', 'User is logged in: ${user.uid}');
         // User is authenticated, check if onboarding is completed
         try {
-          print('DEBUG: Checking Firebase for onboarding status');
+          Logger.d('Main', 'Checking Firebase for onboarding status');
           // Check Firebase directly
           final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
 
           if (doc.exists) {
-            print('DEBUG: User document exists in Firestore');
+            Logger.d('Main', 'User document exists in Firestore');
             final data = doc.data();
-            print('DEBUG: User data: $data');
+            Logger.d('Main', 'User data: $data');
             if (data != null && data['onboardingCompleted'] == true) {
-              print('DEBUG: Onboarding is completed in Firebase');
+              Logger.d('Main', 'Onboarding is completed in Firebase');
 
               // Update Hive with the onboarding data from Firebase
               try {
-                print('DEBUG: Updating Hive with onboarding data from Firebase');
+                Logger.d('Main', 'Updating Hive with onboarding data from Firebase');
                 final onboardingBox = Hive.box<OnboardingData>('onboarding');
 
                 // Create a new OnboardingData object with the data from Firebase
@@ -116,9 +122,9 @@ class _MyAppState extends ConsumerState<MyApp> {
 
                 // Save to Hive
                 await onboardingBox.put(user.uid, onboardingData);
-                print('DEBUG: Successfully updated Hive with onboarding data from Firebase');
+                Logger.d('Main', 'Successfully updated Hive with onboarding data from Firebase');
               } catch (e) {
-                print('DEBUG: Error updating Hive: $e');
+                Logger.d('Main', 'Error updating Hive: $e');
                 // Continue even if there's an error updating Hive
               }
 
@@ -127,21 +133,21 @@ class _MyAppState extends ConsumerState<MyApp> {
                 _isLoading = false;
               });
             } else {
-              print('DEBUG: Onboarding is not completed in Firebase');
+              Logger.d('Main', 'Onboarding is not completed in Firebase');
               // Onboarding is not completed, navigate to onboarding screen
               setState(() {
                 _isLoading = false;
               });
             }
           } else {
-            print('DEBUG: User document does not exist in Firestore');
+            Logger.d('Main', 'User document does not exist in Firestore');
             // User document doesn't exist, navigate to onboarding screen
             setState(() {
               _isLoading = false;
             });
           }
         } catch (e) {
-          print('DEBUG: Error checking onboarding status: $e');
+          Logger.d('Main', 'Error checking onboarding status: $e');
           // Error checking onboarding status, navigate to onboarding screen
           setState(() {
             _isLoading = false;
@@ -150,7 +156,7 @@ class _MyAppState extends ConsumerState<MyApp> {
         }
       }
     } catch (e) {
-      print('DEBUG: Error checking auth status: $e');
+      Logger.d('Main', 'Error checking auth status: $e');
       // Error checking auth status, show error
       setState(() {
         _isLoading = false;
@@ -173,10 +179,10 @@ class _MyAppState extends ConsumerState<MyApp> {
   }
 
   Widget _buildHomeScreen() {
-    print('DEBUG: Building home screen');
-    print('DEBUG: _isLoading: $_isLoading');
-    print('DEBUG: _error: $_error');
-    print('DEBUG: _isSyncing: $_isSyncing');
+    Logger.d('Main', 'Building home screen');
+    Logger.d('Main', '_isLoading: $_isLoading');
+    Logger.d('Main', '_error: $_error');
+    Logger.d('Main', '_isSyncing: $_isSyncing');
 
     // Show syncing screen if we're syncing with Firebase
     if (_isSyncing) {
@@ -195,7 +201,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     }
 
     if (_isLoading) {
-      print('DEBUG: Showing loading screen');
+      Logger.d('Main', 'Showing loading screen');
       return const Scaffold(
         body: Center(
           child: Column(
@@ -211,7 +217,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     }
 
     if (_error != null) {
-      print('DEBUG: Showing error screen: $_error');
+      Logger.d('Main', 'Showing error screen: $_error');
       return Scaffold(
         body: Center(
           child: Column(
@@ -240,34 +246,34 @@ class _MyAppState extends ConsumerState<MyApp> {
     // Check if user is authenticated
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      print('DEBUG: No user logged in, showing auth screen');
+      Logger.d('Main', 'No user logged in, showing auth screen');
       return const AuthScreen();
     }
 
-    print('DEBUG: User is logged in: ${user.uid}');
+    Logger.d('Main', 'User is logged in: ${user.uid}');
 
     // Force a sync with Firebase if we haven't done so yet in this session
     if (!_isSyncing && !_hasSyncedThisSession) {
-      print('DEBUG: Forcing sync with Firebase');
+      Logger.d('Main', 'Forcing sync with Firebase');
       _isSyncing = true;
 
       // Use a post-frame callback to avoid rebuilding during build
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         try {
-          print('DEBUG: Syncing with Firebase...');
+          Logger.d('Main', 'Syncing with Firebase...');
           // Check Firebase directly
           final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
 
           if (doc.exists) {
             final data = doc.data();
-            print('DEBUG: User data from Firebase: $data');
+            Logger.d('Main', 'User data from Firebase: $data');
 
             if (data != null && data['onboardingCompleted'] == true) {
-              print('DEBUG: Onboarding is completed in Firebase');
+              Logger.d('Main', 'Onboarding is completed in Firebase');
 
               // Update Hive with the onboarding data from Firebase
               try {
-                print('DEBUG: Updating Hive with onboarding data from Firebase');
+                Logger.d('Main', 'Updating Hive with onboarding data from Firebase');
                 final onboardingBox = Hive.box<OnboardingData>('onboarding');
 
                 // Create a new OnboardingData object with the data from Firebase
@@ -283,14 +289,14 @@ class _MyAppState extends ConsumerState<MyApp> {
 
                 // Save to Hive
                 await onboardingBox.put(user.uid, onboardingData);
-                print('DEBUG: Successfully updated Hive with onboarding data from Firebase');
+                Logger.d('Main', 'Successfully updated Hive with onboarding data from Firebase');
               } catch (e) {
-                print('DEBUG: Error updating Hive: $e');
+                Logger.d('Main', 'Error updating Hive: $e');
               }
             }
           }
         } catch (e) {
-          print('DEBUG: Error syncing with Firebase: $e');
+          Logger.d('Main', 'Error syncing with Firebase: $e');
         } finally {
           // Update state to trigger a rebuild
           if (mounted) {
@@ -321,13 +327,13 @@ class _MyAppState extends ConsumerState<MyApp> {
     final onboardingBox = Hive.box<OnboardingData>('onboarding');
     final onboardingData = onboardingBox.get(user.uid);
 
-    print('DEBUG: Onboarding data from Hive: $onboardingData');
+    Logger.d('Main', 'Onboarding data from Hive: $onboardingData');
 
     if (onboardingData != null && onboardingData.onboardingCompleted) {
-      print('DEBUG: Onboarding is completed in Hive, showing home screen');
+      Logger.d('Main', 'Onboarding is completed in Hive, showing home screen');
       return const HomeScreen();
     } else {
-      print('DEBUG: Onboarding is not completed in Hive, showing onboarding screen');
+      Logger.d('Main', 'Onboarding is not completed in Hive, showing onboarding screen');
       return const OnboardingScreen();
     }
   }

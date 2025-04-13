@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yetuga/utils/logger.dart';
 import 'package:form_validator/form_validator.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/auth_page_template.dart';

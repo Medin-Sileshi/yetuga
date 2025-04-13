@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yetuga/utils/logger.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:form_validator/form_validator.dart';
 import '../../providers/auth_provider.dart';
@@ -67,7 +68,7 @@ class _EmailSignInScreenState extends ConsumerState<EmailSignInScreen> {
           // Check Firebase directly for onboarding status
           final firebaseService = ref.read(firebaseServiceProvider);
           final userProfile = await firebaseService.getUserProfile();
-          print('DEBUG: User profile from Firebase: $userProfile');
+          Logger.d('EmailSigninScreen', 'User profile from Firebase: $userProfile');
 
           // Close the loading dialog
           if (context.mounted) {
@@ -75,11 +76,11 @@ class _EmailSignInScreenState extends ConsumerState<EmailSignInScreen> {
           }
 
           if (userProfile != null && userProfile['onboardingCompleted'] == true) {
-            print('DEBUG: Onboarding is completed in Firebase, navigating to home screen');
+            Logger.d('EmailSigninScreen', 'Onboarding is completed in Firebase, navigating to home screen');
 
             // Update Hive with the onboarding data from Firebase
             try {
-              print('DEBUG: Updating Hive with onboarding data from Firebase');
+              Logger.d('EmailSigninScreen', 'Updating Hive with onboarding data from Firebase');
               final onboardingNotifier = ref.read(onboardingProvider.notifier);
 
               // Create a new OnboardingData object with the data from Firebase
@@ -95,9 +96,9 @@ class _EmailSignInScreenState extends ConsumerState<EmailSignInScreen> {
 
               // Save to Hive
               await onboardingNotifier.saveData(onboardingData);
-              print('DEBUG: Successfully updated Hive with onboarding data from Firebase');
+              Logger.d('EmailSigninScreen', 'Successfully updated Hive with onboarding data from Firebase');
             } catch (e) {
-              print('DEBUG: Error updating Hive: $e');
+              Logger.d('EmailSigninScreen', 'Error updating Hive: $e');
               // Continue even if there's an error updating Hive
             }
 
@@ -108,7 +109,7 @@ class _EmailSignInScreenState extends ConsumerState<EmailSignInScreen> {
               );
             }
           } else {
-            print('DEBUG: Onboarding is not completed in Firebase, navigating to onboarding screen');
+            Logger.d('EmailSigninScreen', 'Onboarding is not completed in Firebase, navigating to onboarding screen');
             if (context.mounted) {
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (context) => const OnboardingScreen()),
@@ -117,7 +118,7 @@ class _EmailSignInScreenState extends ConsumerState<EmailSignInScreen> {
             }
           }
         } catch (e) {
-          print('DEBUG: Error checking Firebase for onboarding status: $e');
+          Logger.d('EmailSigninScreen', 'Error checking Firebase for onboarding status: $e');
           // Close the loading dialog if it's still open
           if (context.mounted) {
             Navigator.of(context).pop();

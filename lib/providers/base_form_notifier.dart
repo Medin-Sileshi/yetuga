@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:yetuga/utils/logger.dart';
 import '../utils/logger.dart';
 
 /// Base class for form notifiers to reduce code duplication

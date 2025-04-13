@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:yetuga/utils/logger.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/auth_service.dart';
 
@@ -7,7 +8,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
 
   AuthNotifier() : super(const AsyncValue.loading()) {
     _auth.authStateChanges().listen((user) {
-      print(
+      Logger.d('AuthProvider',
           "Auth state changed: ${user != null ? 'User logged in' : 'No user'}");
       state = AsyncValue.data(user);
     });
@@ -16,15 +17,15 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   Future<void> signInWithEmail(String email, String password) async {
     try {
       state = const AsyncValue.loading();
-      print("Attempting email sign in: $email");
+      Logger.d('AuthProvider', 'Attempting email sign in: $email');
       final userCredential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
-      print("Email sign in successful: ${userCredential.user?.uid}");
+      Logger.d('AuthProvider', 'Email sign in successful: ${userCredential.user?.uid}');
       state = AsyncValue.data(userCredential.user);
     } catch (e, st) {
-      print("Email sign in failed: $e");
+      Logger.d('AuthProvider', 'Email sign in failed: $e');
       state = AsyncValue.error(e, st);
       rethrow;
     }
@@ -33,15 +34,15 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   Future<void> createAccount(String email, String password) async {
     try {
       state = const AsyncValue.loading();
-      print("Attempting to create account: $email");
+      Logger.d('AuthProvider', 'Attempting to create account: $email');
       final userCredential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
-      print("Account creation successful: ${userCredential.user?.uid}");
+      Logger.d('AuthProvider', 'Account creation successful: ${userCredential.user?.uid}');
       state = AsyncValue.data(userCredential.user);
     } catch (e, st) {
-      print("Account creation failed: $e");
+      Logger.d('AuthProvider', 'Account creation failed: $e');
       state = AsyncValue.error(e, st);
       rethrow;
     }
@@ -50,19 +51,19 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   Future<void> signInWithGoogle() async {
     try {
       state = const AsyncValue.loading();
-      print("Starting Google sign in process");
+      Logger.d('AuthProvider', 'Starting Google sign in process');
       final userCredential = await authService.signInWithGoogle();
 
       if (userCredential == null) {
-        print("Google sign in was canceled by user");
+        Logger.d('AuthProvider', 'Google sign in was canceled by user');
         state = const AsyncValue.data(null);
         return;
       }
 
-      print("Google sign in successful: ${userCredential.user?.uid}");
+      Logger.d('AuthProvider', 'Google sign in successful: ${userCredential.user?.uid}');
       state = AsyncValue.data(userCredential.user);
     } catch (e, st) {
-      print("Google sign in failed: $e");
+      Logger.d('AuthProvider', 'Google sign in failed: $e');
       state = AsyncValue.error(e, st);
       rethrow;
     }
@@ -71,12 +72,12 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   Future<void> signOut() async {
     try {
       state = const AsyncValue.loading();
-      print("Starting sign out process");
+      Logger.d('AuthProvider', 'Starting sign out process');
       await authService.signOut();
-      print("Sign out successful");
+      Logger.d('AuthProvider', 'Sign out successful');
       state = const AsyncValue.data(null);
     } catch (e, st) {
-      print("Error during sign out: $e");
+      Logger.e('AuthProvider', 'Error during sign out', e);
       state = AsyncValue.error(e, st);
       rethrow;
     }
@@ -85,11 +86,11 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   Future<void> resetPassword(String email) async {
     try {
       state = const AsyncValue.loading();
-      print("Attempting to send password reset email to: $email");
+      Logger.d('AuthProvider', 'Attempting to send password reset email to: $email');
       await _auth.sendPasswordResetEmail(email: email);
-      print("Password reset email sent successfully");
+      Logger.d('AuthProvider', 'Password reset email sent successfully');
     } catch (e, st) {
-      print("Password reset failed: $e");
+      Logger.d('AuthProvider', 'Password reset failed: $e');
       state = AsyncValue.error(e, st);
       rethrow;
     }

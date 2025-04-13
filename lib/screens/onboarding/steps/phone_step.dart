@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yetuga/utils/logger.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/onboarding_form_provider.dart';
@@ -73,12 +74,12 @@ class _PhoneStepState extends ConsumerState<PhoneStep> {
 
   void _validateInput(String value) {
     bool isValid = value.length == 9 && value.startsWith('9');
-    print('DEBUG: Phone _validateInput called with value: $value, isValid: $isValid');
+    Logger.d('PhoneStep', 'Phone _validateInput called with value: $value, isValid: $isValid');
     setState(() {
       _isValid = isValid;
     });
     widget.onValidityChanged(isValid);
-    print('DEBUG: Called phone onValidityChanged with: $isValid');
+    Logger.d('PhoneStep', 'Called phone onValidityChanged with: $isValid');
   }
 
   // This method is now public so it can be called from the onboarding screen

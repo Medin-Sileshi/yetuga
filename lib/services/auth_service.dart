@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:yetuga/utils/logger.dart';
 import 'google_sign_in_service.dart';
 
 class AuthService {
@@ -15,7 +16,7 @@ class AuthService {
     try {
       return await googleSignInService.signInWithGoogle();
     } catch (e) {
-      print('Error signing in with Google: $e');
+      Logger.e('AuthService', 'Error signing in with Google', e);
       rethrow;
     }
   }
@@ -27,10 +28,10 @@ class AuthService {
         email: email,
         password: password,
       );
-      print('Email sign in successful: ${userCredential.user?.email}');
+      Logger.d('AuthService', 'Email sign in successful: ${userCredential.user?.email}');
       return userCredential;
     } catch (e) {
-      print('Error signing in with email: $e');
+      Logger.e('AuthService', 'Error signing in with email', e);
       rethrow;
     }
   }
@@ -42,10 +43,10 @@ class AuthService {
         email: email,
         password: password,
       );
-      print('Account created successfully: ${userCredential.user?.email}');
+      Logger.d('AuthService', 'Account created successfully: ${userCredential.user?.email}');
       return userCredential;
     } catch (e) {
-      print('Error creating account: $e');
+      Logger.e('AuthService', 'Error creating account', e);
       rethrow;
     }
   }
@@ -54,9 +55,9 @@ class AuthService {
   Future<void> resetPassword(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email);
-      print('Password reset email sent to: $email');
+      Logger.d('AuthService', 'Password reset email sent to: $email');
     } catch (e) {
-      print('Error sending password reset email: $e');
+      Logger.e('AuthService', 'Error sending password reset email', e);
       rethrow;
     }
   }
@@ -68,15 +69,15 @@ class AuthService {
       try {
         await googleSignInService.signOut();
       } catch (e) {
-        print('Error signing out from Google: $e');
+        Logger.e('AuthService', 'Error signing out from Google', e);
         // Continue with Firebase sign out even if Google sign out fails
       }
 
       // Sign out from Firebase
       await _auth.signOut();
-      print('User signed out successfully');
+      Logger.d('AuthService', 'User signed out successfully');
     } catch (e) {
-      print('Error signing out: $e');
+      Logger.e('AuthService', 'Error signing out', e);
       rethrow;
     }
   }

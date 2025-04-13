@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yetuga/utils/logger.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/onboarding_form_provider.dart';
 import '../../../providers/business_onboarding_form_provider.dart';
@@ -72,11 +73,11 @@ class _AccountTypeStepState extends ConsumerState<AccountTypeStep> {
 
         // Try to trigger the next button directly
         if (_selectedType != null && _selectedType!.isNotEmpty) {
-          print('DEBUG: Trying to force next button update');
+          Logger.d('AccountTypeStep', 'Trying to force next button update');
           // This is a hack to force the parent to check the form data again
           final formData = ref.read(onboardingFormProvider);
           if (formData.accountType != null && formData.accountType!.isNotEmpty) {
-            print('DEBUG: Account type is set in form data: ${formData.accountType}');
+            Logger.d('AccountTypeStep', 'Account type is set in form data: ${formData.accountType}');
           }
         }
       }

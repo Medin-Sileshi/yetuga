@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yetuga/utils/logger.dart';
 
 class AppColors {
   static const primary = Color(0xFF00182C);

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:yetuga/utils/logger.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -83,7 +84,7 @@ class FirebaseService {
 
       // Validate phone number format (Ethiopian)
       // Skip validation for now to allow the data to be saved
-      print('DEBUG: Phone number being saved to Firebase: $phoneNumber');
+      Logger.d('FirebaseService', 'Phone number being saved to Firebase: $phoneNumber');
 
       // We'll just make sure it's not empty
       if (phoneNumber.isEmpty) {
@@ -131,7 +132,7 @@ class FirebaseService {
         userData['interests'] = interests;
       }
 
-      print('DEBUG: Firebase: Saving user data to Firestore...');
+      Logger.d('FirebaseService', 'Firebase: Saving user data to Firestore...');
       await _firestore.collection('users').doc(user.uid).set(userData);
     } on FirebaseException catch (e) {
       throw Exception('Firebase error: ${e.message}');
@@ -160,23 +161,23 @@ class FirebaseService {
     try {
       final user = _auth.currentUser;
       if (user == null) {
-        print('DEBUG: FirebaseService: No user logged in');
+        Logger.d('FirebaseService', 'FirebaseService: No user logged in');
         return null;
       }
 
-      print('DEBUG: FirebaseService: Getting profile for user: ${user.uid}');
+      Logger.d('FirebaseService', 'FirebaseService: Getting profile for user: ${user.uid}');
       final doc = await _firestore.collection('users').doc(user.uid).get();
 
       if (doc.exists) {
         final data = doc.data();
-        print('DEBUG: FirebaseService: User profile found: $data');
+        Logger.d('FirebaseService', 'FirebaseService: User profile found: $data');
         return data;
       } else {
-        print('DEBUG: FirebaseService: User profile not found for user: ${user.uid}');
+        Logger.d('FirebaseService', 'FirebaseService: User profile not found for user: ${user.uid}');
         return null;
       }
     } catch (e) {
-      print('DEBUG: FirebaseService: Error getting user profile: $e');
+      Logger.d('FirebaseService', 'FirebaseService: Error getting user profile: $e');
       return null; // Return null instead of throwing to avoid crashing the app
     }
   }

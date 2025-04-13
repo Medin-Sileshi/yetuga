@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:yetuga/utils/logger.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 class GoogleSignInService {
@@ -17,7 +18,7 @@ class GoogleSignInService {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
-        print('Google Sign In was canceled by user');
+        Logger.d('GoogleSignInService', 'Google Sign In was canceled by user');
         return null;
       }
 
@@ -42,7 +43,7 @@ class GoogleSignInService {
         return await _auth.signInWithCredential(credential);
       }
     } catch (e) {
-      print('Error signing in with Google: $e');
+      Logger.e('GoogleSignInService', 'Error signing in with Google', e);
       rethrow;
     }
   }
@@ -54,9 +55,9 @@ class GoogleSignInService {
         _auth.signOut(),
         _googleSignIn.signOut(),
       ]);
-      print('User signed out successfully');
+      Logger.d('GoogleSignInService', 'User signed out successfully');
     } catch (e) {
-      print('Error signing out: $e');
+      Logger.e('GoogleSignInService', 'Error signing out', e);
       rethrow;
     }
   }

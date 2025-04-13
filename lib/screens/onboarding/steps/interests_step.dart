@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yetuga/utils/logger.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/onboarding_form_provider.dart';
 
@@ -70,7 +71,7 @@ class _InterestsStepState extends ConsumerState<InterestsStep> {
 
     // Save interests to form provider
     ref.read(onboardingFormProvider.notifier).setInterests(_selectedInterests);
-    print('DEBUG: Interests selected: $_selectedInterests');
+    Logger.d('InterestsStep', 'Interests selected: $_selectedInterests');
   }
 
 

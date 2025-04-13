@@ -2,30 +2,49 @@ import 'package:flutter/foundation.dart';
 
 /// A simple logger utility that only logs in debug mode
 class Logger {
+  // Control whether debug logs are enabled
+  static bool _debugLogsEnabled = true;
+
+  // Maximum log message length to prevent memory issues
+  static const int _maxLogLength = 1000;
+
+  // Enable or disable debug logs
+  static void setDebugLogsEnabled(bool enabled) {
+    _debugLogsEnabled = enabled;
+  }
+
+  // Truncate long messages to prevent memory issues
+  static String _truncateMessage(String message) {
+    if (message.length > _maxLogLength) {
+      return '${message.substring(0, _maxLogLength)}... (truncated)';
+    }
+    return message;
+  }
+
   static void d(String tag, String message) {
-    if (kDebugMode) {
-      print('DEBUG: [$tag] $message');
+    if (kDebugMode && _debugLogsEnabled) {
+      print('DEBUG: [${_truncateMessage(tag)}] ${_truncateMessage(message)}');
     }
   }
 
   static void i(String tag, String message) {
     if (kDebugMode) {
-      print('INFO: [$tag] $message');
+      print('INFO: [${_truncateMessage(tag)}] ${_truncateMessage(message)}');
     }
   }
 
   static void w(String tag, String message) {
     if (kDebugMode) {
-      print('WARN: [$tag] $message');
+      print('WARN: [${_truncateMessage(tag)}] ${_truncateMessage(message)}');
     }
   }
 
   static void e(String tag, String message, [dynamic error]) {
     if (kDebugMode) {
       if (error != null) {
-        print('ERROR: [$tag] $message - $error');
+        print('ERROR: [${_truncateMessage(tag)}] ${_truncateMessage(message)} - $error');
       } else {
-        print('ERROR: [$tag] $message');
+        print('ERROR: [${_truncateMessage(tag)}] ${_truncateMessage(message)}');
       }
     }
   }

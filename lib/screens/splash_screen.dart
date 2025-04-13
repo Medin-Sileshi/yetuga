@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:yetuga/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/firebase_provider.dart';
@@ -28,39 +29,39 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   void _checkAuthStatus() {
     try {
-      print('DEBUG: SplashScreen: Checking auth status');
+      Logger.d('SplashScreen', 'SplashScreen: Checking auth status');
       final user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
-        print('DEBUG: SplashScreen: No user logged in');
+        Logger.d('SplashScreen', 'SplashScreen: No user logged in');
         _navigateToAuthScreen();
       } else {
-        print('DEBUG: SplashScreen: User is logged in: ${user.uid}');
+        Logger.d('SplashScreen', 'SplashScreen: User is logged in: ${user.uid}');
         _checkOnboardingStatus();
       }
     } catch (e) {
-      print('DEBUG: SplashScreen: Error checking auth status: $e');
+      Logger.d('SplashScreen', 'SplashScreen: Error checking auth status: $e');
       _showError('Error checking auth status: $e');
     }
   }
 
   Future<void> _checkOnboardingStatus() async {
     try {
-      print('DEBUG: SplashScreen: Checking onboarding status');
+      Logger.d('SplashScreen', 'SplashScreen: Checking onboarding status');
       final firebaseService = ref.read(firebaseServiceProvider);
       final userProfile = await firebaseService.getUserProfile();
 
-      print('DEBUG: SplashScreen: User profile: $userProfile');
+      Logger.d('SplashScreen', 'SplashScreen: User profile: $userProfile');
 
       if (userProfile != null && userProfile['onboardingCompleted'] == true) {
-        print('DEBUG: SplashScreen: Onboarding is complete');
+        Logger.d('SplashScreen', 'SplashScreen: Onboarding is complete');
         _navigateToHomeScreen();
       } else {
-        print('DEBUG: SplashScreen: Onboarding is not complete');
+        Logger.d('SplashScreen', 'SplashScreen: Onboarding is not complete');
         _navigateToOnboardingScreen();
       }
     } catch (e) {
-      print('DEBUG: SplashScreen: Error checking onboarding status: $e');
+      Logger.d('SplashScreen', 'SplashScreen: Error checking onboarding status: $e');
       _showError('Error checking onboarding status: $e');
     }
   }

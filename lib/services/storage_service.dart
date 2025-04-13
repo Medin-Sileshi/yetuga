@@ -1,4 +1,5 @@
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:yetuga/utils/logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/onboarding_data.dart';
 import '../utils/logger.dart';
@@ -12,19 +13,19 @@ class StorageService {
 
   Future<void> init() async {
     try {
-      print('DEBUG: StorageService: Initializing...');
+      Logger.d('StorageService', 'StorageService: Initializing...');
       if (Hive.isBoxOpen(_onboardingBoxName)) {
-        print('DEBUG: StorageService: Box is already open');
+        Logger.d('StorageService', 'StorageService: Box is already open');
         _onboardingBox = Hive.box<OnboardingData>(_onboardingBoxName);
       } else {
-        print('DEBUG: StorageService: Opening box');
+        Logger.d('StorageService', 'StorageService: Opening box');
         _onboardingBox = await Hive.openBox<OnboardingData>(_onboardingBoxName);
       }
-      print('DEBUG: StorageService: Box opened successfully');
-      print('DEBUG: StorageService: Box keys: ${_onboardingBox?.keys.toList()}');
+      Logger.d('StorageService', 'StorageService: Box opened successfully');
+      Logger.d('StorageService', 'StorageService: Box keys: ${_onboardingBox?.keys.toList()}');
       Logger.info('StorageService: Initialized successfully');
     } catch (e) {
-      print('DEBUG: StorageService: Failed to initialize: $e');
+      Logger.d('StorageService', 'StorageService: Failed to initialize: $e');
       Logger.error('StorageService: Failed to initialize', e);
       rethrow;
     }
@@ -47,27 +48,27 @@ class StorageService {
       // Get current user ID
       final user = _auth.currentUser;
       if (user == null) {
-        print('DEBUG: StorageService: No user logged in, returning null');
+        Logger.d('StorageService', 'StorageService: No user logged in, returning null');
         return null;
       }
 
       final userId = user.uid;
-      print('DEBUG: StorageService: Getting onboarding data for user: $userId');
-      print('DEBUG: StorageService: Box keys: ${_onboardingBox?.keys.toList()}');
+      Logger.d('StorageService', 'StorageService: Getting onboarding data for user: $userId');
+      Logger.d('StorageService', 'StorageService: Box keys: ${_onboardingBox?.keys.toList()}');
 
       // Try to get data from Hive
       final data = _onboardingBox?.get(userId);
-      print('DEBUG: StorageService: Retrieved data from Hive: $data');
+      Logger.d('StorageService', 'StorageService: Retrieved data from Hive: $data');
 
       // If no data in Hive, try to get from Firebase
       if (data == null) {
-        print('DEBUG: StorageService: No data in Hive, checking Firebase');
+        Logger.d('StorageService', 'StorageService: No data in Hive, checking Firebase');
         return await syncWithFirebase(userId);
       }
 
       return data;
     } catch (e) {
-      print('DEBUG: StorageService: Failed to get onboarding data: $e');
+      Logger.d('StorageService', 'StorageService: Failed to get onboarding data: $e');
       Logger.error('StorageService: Failed to get onboarding data', e);
       rethrow;
     }
@@ -83,18 +84,18 @@ class StorageService {
       }
 
       final userId = user.uid;
-      print('DEBUG: StorageService: Saving onboarding data for user: $userId');
-      print('DEBUG: StorageService: Data to save: $data');
+      Logger.d('StorageService', 'StorageService: Saving onboarding data for user: $userId');
+      Logger.d('StorageService', 'StorageService: Data to save: $data');
 
       // Save to Hive with user ID as key
       await _onboardingBox?.put(userId, data);
 
-      print('DEBUG: StorageService: Saved onboarding data successfully');
-      print('DEBUG: StorageService: Box keys: ${_onboardingBox?.keys.toList()}');
-      print('DEBUG: StorageService: Data in box: ${_onboardingBox?.get(userId)}');
+      Logger.d('StorageService', 'StorageService: Saved onboarding data successfully');
+      Logger.d('StorageService', 'StorageService: Box keys: ${_onboardingBox?.keys.toList()}');
+      Logger.d('StorageService', 'StorageService: Data in box: ${_onboardingBox?.get(userId)}');
       Logger.info('StorageService: Saved onboarding data successfully');
     } catch (e) {
-      print('DEBUG: StorageService: Failed to save onboarding data: $e');
+      Logger.d('StorageService', 'StorageService: Failed to save onboarding data: $e');
       Logger.error('StorageService: Failed to save onboarding data', e);
       rethrow;
     }
@@ -110,16 +111,16 @@ class StorageService {
       }
 
       final userId = user.uid;
-      print('DEBUG: StorageService: Clearing onboarding data for user: $userId');
-      print('DEBUG: StorageService: Box keys before clear: ${_onboardingBox?.keys.toList()}');
+      Logger.d('StorageService', 'StorageService: Clearing onboarding data for user: $userId');
+      Logger.d('StorageService', 'StorageService: Box keys before clear: ${_onboardingBox?.keys.toList()}');
 
       // Delete only the current user's data
       await _onboardingBox?.delete(userId);
 
-      print('DEBUG: StorageService: Box keys after clear: ${_onboardingBox?.keys.toList()}');
+      Logger.d('StorageService', 'StorageService: Box keys after clear: ${_onboardingBox?.keys.toList()}');
       Logger.info('StorageService: Cleared onboarding data successfully');
     } catch (e) {
-      print('DEBUG: StorageService: Failed to clear onboarding data: $e');
+      Logger.d('StorageService', 'StorageService: Failed to clear onboarding data: $e');
       Logger.error('StorageService: Failed to clear onboarding data', e);
       rethrow;
     }
@@ -128,21 +129,21 @@ class StorageService {
   // New method to sync data with Firebase
   Future<OnboardingData?> syncWithFirebase(String userId) async {
     try {
-      print('DEBUG: StorageService: Syncing with Firebase for user: $userId');
+      Logger.d('StorageService', 'StorageService: Syncing with Firebase for user: $userId');
 
       // Get user profile from Firebase
       final userProfile = await _firebaseService.getUserProfile();
 
       if (userProfile == null) {
-        print('DEBUG: StorageService: No data found in Firebase');
+        Logger.d('StorageService', 'StorageService: No data found in Firebase');
         return null;
       }
 
-      print('DEBUG: StorageService: Data found in Firebase: $userProfile');
+      Logger.d('StorageService', 'StorageService: Data found in Firebase: $userProfile');
 
       // Check if onboarding is completed in Firebase
       final onboardingCompleted = userProfile['onboardingCompleted'] ?? false;
-      print('DEBUG: StorageService: onboardingCompleted in Firebase: $onboardingCompleted');
+      Logger.d('StorageService', 'StorageService: onboardingCompleted in Firebase: $onboardingCompleted');
 
       // Convert Firebase data to OnboardingData
       final onboardingData = OnboardingData()
@@ -158,10 +159,10 @@ class StorageService {
       // Save the synced data to Hive
       await _onboardingBox?.put(userId, onboardingData);
 
-      print('DEBUG: StorageService: Synced data saved to Hive');
+      Logger.d('StorageService', 'StorageService: Synced data saved to Hive');
       return onboardingData;
     } catch (e) {
-      print('DEBUG: StorageService: Failed to sync with Firebase: $e');
+      Logger.d('StorageService', 'StorageService: Failed to sync with Firebase: $e');
       Logger.error('StorageService: Failed to sync with Firebase', e);
       return null; // Return null but don't rethrow to avoid crashing the app
     }
@@ -192,11 +193,11 @@ class StorageService {
 
     try {
       final data = _onboardingBox?.get(userId);
-      print('DEBUG: StorageService: Got onboarding data from Hive for user: $userId');
-      print('DEBUG: StorageService: Data: $data');
+      Logger.d('StorageService', 'StorageService: Got onboarding data from Hive for user: $userId');
+      Logger.d('StorageService', 'StorageService: Data: $data');
       return data;
     } catch (e) {
-      print('DEBUG: StorageService: Error getting onboarding data from Hive: $e');
+      Logger.d('StorageService', 'StorageService: Error getting onboarding data from Hive: $e');
       return null;
     }
   }

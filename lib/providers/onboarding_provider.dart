@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:yetuga/utils/logger.dart';
 import '../models/onboarding_data.dart';
 import 'storage_provider.dart';
 
@@ -20,21 +21,21 @@ class OnboardingNotifier extends StateNotifier<AsyncValue<OnboardingData>> {
 
   Future<void> _loadDataFromHive() async {
     try {
-      print('DEBUG: OnboardingNotifier: Loading data from Hive...');
+      Logger.d('OnboardingProvider', 'OnboardingNotifier: Loading data from Hive...');
       state = const AsyncValue.loading();
 
       final storageService = _ref!.read(storageServiceProvider);
       final data = await storageService.getOnboardingData();
 
       if (data != null) {
-        print('DEBUG: OnboardingNotifier: Data loaded from Hive: $data');
+        Logger.d('OnboardingProvider', 'OnboardingNotifier: Data loaded from Hive: $data');
         state = AsyncValue.data(data);
       } else {
-        print('DEBUG: OnboardingNotifier: No data found in Hive, using empty data');
+        Logger.d('OnboardingProvider', 'OnboardingNotifier: No data found in Hive, using empty data');
         state = AsyncValue.data(OnboardingData());
       }
     } catch (e) {
-      print('DEBUG: OnboardingNotifier: Error loading data from Hive: $e');
+      Logger.d('OnboardingProvider', 'OnboardingNotifier: Error loading data from Hive: $e');
       state = AsyncValue.error(e, StackTrace.current);
     }
   }
@@ -42,7 +43,7 @@ class OnboardingNotifier extends StateNotifier<AsyncValue<OnboardingData>> {
   // Method to sync data with Firebase
   Future<void> syncWithFirebase() async {
     try {
-      print('DEBUG: OnboardingNotifier: Syncing with Firebase...');
+      Logger.d('OnboardingProvider', 'OnboardingNotifier: Syncing with Firebase...');
       state = const AsyncValue.loading();
 
       final storageService = _ref!.read(storageServiceProvider);
@@ -50,22 +51,22 @@ class OnboardingNotifier extends StateNotifier<AsyncValue<OnboardingData>> {
       // Force a direct sync with Firebase
       final userId = storageService.getCurrentUserId();
       if (userId == null) {
-        print('DEBUG: OnboardingNotifier: No user logged in, cannot sync');
+        Logger.d('OnboardingProvider', 'OnboardingNotifier: No user logged in, cannot sync');
         state = AsyncValue.data(OnboardingData());
         return;
       }
 
       // First try to get data from Firebase directly
-      print('DEBUG: OnboardingNotifier: Checking Firebase directly...');
+      Logger.d('OnboardingProvider', 'OnboardingNotifier: Checking Firebase directly...');
       final firebaseService = storageService.getFirebaseService();
       final userProfile = await firebaseService.getUserProfile();
 
       if (userProfile != null) {
-        print('DEBUG: OnboardingNotifier: Found user profile in Firebase: $userProfile');
+        Logger.d('OnboardingProvider', 'OnboardingNotifier: Found user profile in Firebase: $userProfile');
 
         // Check if onboarding is completed in Firebase
         final onboardingCompleted = userProfile['onboardingCompleted'] == true;
-        print('DEBUG: OnboardingNotifier: onboardingCompleted in Firebase: $onboardingCompleted');
+        Logger.d('OnboardingProvider', 'OnboardingNotifier: onboardingCompleted in Firebase: $onboardingCompleted');
 
         // Create OnboardingData from Firebase data
         final completedData = OnboardingData()
@@ -79,32 +80,32 @@ class OnboardingNotifier extends StateNotifier<AsyncValue<OnboardingData>> {
           ..onboardingCompleted = onboardingCompleted;
 
         // Save to Hive and update state
-        print('DEBUG: OnboardingNotifier: Saving Firebase data to Hive');
+        Logger.d('OnboardingProvider', 'OnboardingNotifier: Saving Firebase data to Hive');
         await storageService.saveOnboardingData(completedData);
 
         // Double-check that the data was saved correctly
         final savedData = await storageService.getOnboardingDataFromHive();
-        print('DEBUG: OnboardingNotifier: Data saved to Hive: $savedData');
-        print('DEBUG: OnboardingNotifier: Is complete: ${savedData?.isComplete()}');
+        Logger.d('OnboardingProvider', 'OnboardingNotifier: Data saved to Hive: $savedData');
+        Logger.d('OnboardingProvider', 'OnboardingNotifier: Is complete: ${savedData?.isComplete()}');
 
         state = AsyncValue.data(completedData);
         return;
       } else {
-        print('DEBUG: OnboardingNotifier: No user profile found in Firebase');
+        Logger.d('OnboardingProvider', 'OnboardingNotifier: No user profile found in Firebase');
       }
 
       // If not found in Firebase, try the normal sync process
       final data = await storageService.syncWithFirebase(userId);
 
       if (data != null) {
-        print('DEBUG: OnboardingNotifier: Data synced from Firebase: $data');
+        Logger.d('OnboardingProvider', 'OnboardingNotifier: Data synced from Firebase: $data');
         state = AsyncValue.data(data);
       } else {
-        print('DEBUG: OnboardingNotifier: No data found in Firebase, using empty data');
+        Logger.d('OnboardingProvider', 'OnboardingNotifier: No data found in Firebase, using empty data');
         state = AsyncValue.data(OnboardingData());
       }
     } catch (e) {
-      print('DEBUG: OnboardingNotifier: Error syncing with Firebase: $e');
+      Logger.d('OnboardingProvider', 'OnboardingNotifier: Error syncing with Firebase: $e');
       // Don't update state to error to avoid breaking the UI
       // Just keep the current state
     }
@@ -180,13 +181,13 @@ class OnboardingNotifier extends StateNotifier<AsyncValue<OnboardingData>> {
       if (_ref != null) {
         final storageService = _ref.read(storageServiceProvider);
         await storageService.saveOnboardingData(data);
-        print('DEBUG: Successfully saved to Hive');
+        Logger.d('OnboardingProvider', 'Successfully saved to Hive');
       } else {
-        print('DEBUG: Ref is null, skipping Hive save');
+        Logger.d('OnboardingProvider', 'Ref is null, skipping Hive save');
       }
       return Future.value();
     } catch (e) {
-      print('DEBUG: Error saving to Hive: $e');
+      Logger.d('OnboardingProvider', 'Error saving to Hive: $e');
       throw Exception('Failed to save to Hive: $e');
     }
   }
@@ -199,9 +200,9 @@ class OnboardingNotifier extends StateNotifier<AsyncValue<OnboardingData>> {
       try {
         final storageService = _ref.read(storageServiceProvider);
         await storageService.clearOnboardingData();
-        print('DEBUG: Successfully cleared data from Hive');
+        Logger.d('OnboardingProvider', 'Successfully cleared data from Hive');
       } catch (e) {
-        print('DEBUG: Error clearing data from Hive: $e');
+        Logger.d('OnboardingProvider', 'Error clearing data from Hive: $e');
       }
     }
   }

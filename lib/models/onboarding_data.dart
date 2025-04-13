@@ -1,4 +1,5 @@
 import 'package:hive/hive.dart';
+import 'package:yetuga/utils/logger.dart';
 
 part 'onboarding_data.g.dart';
 
@@ -53,7 +54,7 @@ class OnboardingData extends HiveObject {
   bool isComplete() {
     // If onboardingCompleted is explicitly set to true (from Firebase), return true
     if (onboardingCompleted) {
-      print('DEBUG: OnboardingData.isComplete: true (onboardingCompleted flag is set)');
+      Logger.d('OnboardingData', 'OnboardingData.isComplete: true (onboardingCompleted flag is set)');
       return true;
     }
 
@@ -67,14 +68,14 @@ class OnboardingData extends HiveObject {
         interests != null &&
         interests!.isNotEmpty;
 
-    print('DEBUG: OnboardingData.isComplete: $complete (based on field checks)');
-    print('DEBUG: accountType: $accountType');
-    print('DEBUG: displayName: $displayName');
-    print('DEBUG: username: $username');
-    print('DEBUG: birthday: $birthday');
-    print('DEBUG: phoneNumber: $phoneNumber');
-    print('DEBUG: profileImageUrl: $profileImageUrl');
-    print('DEBUG: interests: $interests');
+    Logger.d('OnboardingData', 'OnboardingData.isComplete: $complete (based on field checks)');
+    Logger.d('OnboardingData', 'accountType: $accountType');
+    Logger.d('OnboardingData', 'displayName: $displayName');
+    Logger.d('OnboardingData', 'username: $username');
+    Logger.d('OnboardingData', 'birthday: $birthday');
+    Logger.d('OnboardingData', 'phoneNumber: $phoneNumber');
+    Logger.d('OnboardingData', 'profileImageUrl: $profileImageUrl');
+    Logger.d('OnboardingData', 'interests: $interests');
 
     return complete;
   }

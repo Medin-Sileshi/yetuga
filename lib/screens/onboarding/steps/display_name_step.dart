@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yetuga/utils/logger.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/onboarding_form_provider.dart';
 import '../../../providers/business_onboarding_form_provider.dart';
@@ -132,12 +133,12 @@ class _DisplayNameStepState extends ConsumerState<DisplayNameStep> {
   }
 
   void _notifyValidityChanged(bool isValid) {
-    print('DEBUG: _notifyValidityChanged called with isValid: $isValid');
+    Logger.d('DisplayNameStep', '_notifyValidityChanged called with isValid: $isValid');
     if (widget.onValidityChanged != null) {
       widget.onValidityChanged!(isValid);
-      print('DEBUG: Called onValidityChanged callback with: $isValid');
+      Logger.d('DisplayNameStep', 'Called onValidityChanged callback with: $isValid');
     } else {
-      print('DEBUG: onValidityChanged callback is null');
+      Logger.d('DisplayNameStep', 'onValidityChanged callback is null');
     }
   }
 
@@ -242,15 +243,15 @@ class _DisplayNameStepState extends ConsumerState<DisplayNameStep> {
           ref.read(onboardingFormProvider.notifier).setDisplayName(displayName);
           ref.read(onboardingFormProvider.notifier).setUsername(username);
 
-          print('DEBUG: Business name saved: $displayName');
-          print('DEBUG: Business username saved: $username');
+          Logger.d('DisplayNameStep', 'Business name saved: $displayName');
+          Logger.d('DisplayNameStep', 'Business username saved: $username');
         } else {
           // For personal accounts, save to personal form provider
           ref.read(onboardingFormProvider.notifier).setDisplayName(displayName);
           ref.read(onboardingFormProvider.notifier).setUsername(username);
 
-          print('DEBUG: Display name saved: $displayName');
-          print('DEBUG: Username saved: $username');
+          Logger.d('DisplayNameStep', 'Display name saved: $displayName');
+          Logger.d('DisplayNameStep', 'Username saved: $username');
         }
 
         // Call onNext to navigate to the next page

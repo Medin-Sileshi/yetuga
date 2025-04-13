@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yetuga/utils/logger.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -64,7 +65,7 @@ class AuthScreen extends ConsumerWidget {
           // Check Firebase directly for onboarding status
           final firebaseService = ref.read(firebaseServiceProvider);
           final userProfile = await firebaseService.getUserProfile();
-          print('DEBUG: User profile from Firebase: $userProfile');
+          Logger.d('AuthScreen', 'User profile from Firebase: $userProfile');
 
           // Close the loading dialog
           if (context.mounted) {
@@ -72,11 +73,11 @@ class AuthScreen extends ConsumerWidget {
           }
 
           if (userProfile != null && userProfile['onboardingCompleted'] == true) {
-            print('DEBUG: Onboarding is completed in Firebase, navigating to home screen');
+            Logger.d('AuthScreen', 'Onboarding is completed in Firebase, navigating to home screen');
 
             // Update Hive with the onboarding data from Firebase
             try {
-              print('DEBUG: Updating Hive with onboarding data from Firebase');
+              Logger.d('AuthScreen', 'Updating Hive with onboarding data from Firebase');
               final onboardingNotifier = ref.read(onboardingProvider.notifier);
 
               // Create a new OnboardingData object with the data from Firebase
@@ -92,9 +93,9 @@ class AuthScreen extends ConsumerWidget {
 
               // Save to Hive
               await onboardingNotifier.saveData(onboardingData);
-              print('DEBUG: Successfully updated Hive with onboarding data from Firebase');
+              Logger.d('AuthScreen', 'Successfully updated Hive with onboarding data from Firebase');
             } catch (e) {
-              print('DEBUG: Error updating Hive: $e');
+              Logger.d('AuthScreen', 'Error updating Hive: $e');
               // Continue even if there's an error updating Hive
             }
 
@@ -105,7 +106,7 @@ class AuthScreen extends ConsumerWidget {
               );
             }
           } else {
-            print('DEBUG: Onboarding is not completed in Firebase, navigating to onboarding screen');
+            Logger.d('AuthScreen', 'Onboarding is not completed in Firebase, navigating to onboarding screen');
             if (context.mounted) {
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (context) => const OnboardingScreen()),
@@ -114,7 +115,7 @@ class AuthScreen extends ConsumerWidget {
             }
           }
         } catch (e) {
-          print('DEBUG: Error checking Firebase for onboarding status: $e');
+          Logger.d('AuthScreen', 'Error checking Firebase for onboarding status: $e');
           // Close the loading dialog if it's still open
           if (context.mounted) {
             Navigator.of(context).pop();
