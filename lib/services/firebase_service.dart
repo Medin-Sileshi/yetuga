@@ -41,24 +41,24 @@ class FirebaseService {
     required String? accountType,
     required String? displayName,
     required String? username,
-    required DateTime? birthday,
+    DateTime? birthday,
     required String? phoneNumber,
     required String? profileImageUrl,
-    required List<String>? interests,
+    List<String>? interests,
+    DateTime? establishedDate,
+    List<String>? businessTypes,
   }) async {
     try {
       final user = _auth.currentUser;
       if (user == null) throw Exception('User not authenticated');
 
-      // Validate required fields
+      // Validate common required fields
       if (accountType == null ||
           displayName == null ||
           username == null ||
-          birthday == null ||
           phoneNumber == null ||
-          profileImageUrl == null ||
-          interests == null) {
-        throw Exception('All fields are required');
+          profileImageUrl == null) {
+        throw Exception('Common fields are required');
       }
 
       // Validate username format - allow lowercase letters, numbers, and underscores
@@ -81,30 +81,49 @@ class FirebaseService {
         throw Exception('Phone number cannot be empty');
       }
 
-      // Validate interests
-      if (interests.isEmpty) {
-        throw Exception('At least one interest is required');
-      }
-
-      print('DEBUG: Firebase: Converting data for Firestore...');
-      // Convert DateTime to Firestore Timestamp
-      // Convert the birthday to a Firestore timestamp
-      final birthdayTimestamp = Timestamp.fromDate(birthday);
-      print('DEBUG: Firebase: Birthday converted to timestamp: $birthdayTimestamp');
-
-      print('DEBUG: Firebase: Saving user data to Firestore...');
-      await _firestore.collection('users').doc(user.uid).set({
+      // Create a map to hold the user data
+      final Map<String, dynamic> userData = {
         'accountType': accountType,
         'displayName': displayName,
         'username': username,
-        'birthday': birthdayTimestamp,
         'phoneNumber': phoneNumber,
         'profileImageUrl': profileImageUrl,
-        'interests': interests,
         'onboardingCompleted': true,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      // Add account-specific fields
+      if (accountType == 'business') {
+        // Business account validation
+        if (businessTypes == null || businessTypes.isEmpty) {
+          throw Exception('Business types are required for business accounts');
+        }
+
+        if (establishedDate == null) {
+          throw Exception('Established date is required for business accounts');
+        }
+
+        // Add business-specific fields
+        userData['businessTypes'] = businessTypes;
+        userData['establishedDate'] = Timestamp.fromDate(establishedDate);
+      } else {
+        // Personal account validation
+        if (birthday == null) {
+          throw Exception('Birthday is required for personal accounts');
+        }
+
+        if (interests == null || interests.isEmpty) {
+          throw Exception('At least one interest is required for personal accounts');
+        }
+
+        // Add personal-specific fields
+        userData['birthday'] = Timestamp.fromDate(birthday);
+        userData['interests'] = interests;
+      }
+
+      print('DEBUG: Firebase: Saving user data to Firestore...');
+      await _firestore.collection('users').doc(user.uid).set(userData);
     } on FirebaseException catch (e) {
       throw Exception('Firebase error: ${e.message}');
     } catch (e) {

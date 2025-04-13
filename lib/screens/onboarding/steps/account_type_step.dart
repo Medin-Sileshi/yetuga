@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/onboarding_form_provider.dart';
+import '../../../providers/business_onboarding_form_provider.dart';
 
 class AccountTypeStep extends ConsumerStatefulWidget {
   final VoidCallback onNext;
@@ -55,9 +56,13 @@ class _AccountTypeStepState extends ConsumerState<AccountTypeStep> {
       _selectedDescription = _getDescription(type);
     });
 
-    // Update the form provider
+    // Update both form providers
     ref.read(onboardingFormProvider.notifier).setAccountType(type);
-    print('DEBUG: Account type selected: $type');
+
+    // Also update the business form provider if this is a business account
+    if (type == 'business') {
+      ref.read(businessOnboardingFormProvider.notifier).setAccountType(type);
+    }
 
     // Force a rebuild of the parent widget to update the Next button
     WidgetsBinding.instance.addPostFrameCallback((_) {

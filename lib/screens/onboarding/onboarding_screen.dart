@@ -8,12 +8,16 @@ import 'steps/birthday_step.dart';
 import 'steps/phone_step.dart';
 import 'steps/profile_image_step.dart';
 import 'steps/interests_step.dart';
+import 'steps/established_in_step.dart';
+import 'steps/business_type_step.dart';
 import '../../providers/onboarding_provider.dart';
 import '../../providers/onboarding_form_provider.dart';
+import '../../providers/business_onboarding_form_provider.dart';
 import '../../providers/firebase_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../screens/home_screen.dart';
+import '../../utils/logger.dart';
 import '../../screens/auth/auth_screen.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
@@ -27,6 +31,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   int _currentPage = 0;
   final int _totalPages = 6;
   bool _isDisplayNameValid = false;
+
+  // Logger tag for this class
+  final String _logTag = 'OnboardingScreen';
   bool _isPhoneValid = false;
   bool _isProfileImageValid = false;
   bool _isSubmitting = false;
@@ -118,6 +125,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     try {
       // Get form data
       final formData = ref.read(onboardingFormProvider);
+      final accountType = formData.accountType;
+      final isBusiness = accountType == 'business';
+
+      // For business accounts, we need to get the business form data
+      var businessFormData = isBusiness ? ref.read(businessOnboardingFormProvider) : null;
 
       // Debug log the form data
       print('DEBUG: Submitting onboarding data:');
@@ -130,10 +142,91 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       print('DEBUG: Interests: ${formData.interests}');
       print('DEBUG: Is Complete: ${formData.isComplete()}');
 
+      if (isBusiness && businessFormData != null) {
+        print('DEBUG: Business Form Data:');
+        print('DEBUG: Business Name: ${businessFormData.businessName}');
+        print('DEBUG: Established Date: ${businessFormData.establishedDate}');
+        print('DEBUG: Business Types: ${businessFormData.businessTypes}');
+      }
+
       // Check if form is complete
-      if (!formData.isComplete()) {
-        print('DEBUG: Form is incomplete!');
-        throw Exception('Please complete all steps');
+      if (isBusiness) {
+        if (businessFormData == null) {
+          print('DEBUG: Business form data is null!');
+          throw Exception('Please complete all steps');
+        }
+
+        print('DEBUG: Business form data:');
+        print('DEBUG: accountType: ${businessFormData.accountType}');
+        print('DEBUG: businessName: ${businessFormData.businessName}');
+        print('DEBUG: username: ${businessFormData.username}');
+        print('DEBUG: establishedDate: ${businessFormData.establishedDate}');
+        print('DEBUG: phoneNumber: ${businessFormData.phoneNumber}');
+        print('DEBUG: profileImageUrl: ${businessFormData.profileImageUrl}');
+        print('DEBUG: businessTypes: ${businessFormData.businessTypes}');
+        print('DEBUG: isComplete: ${businessFormData.isComplete()}');
+
+        // Make sure the account type is set in the business form provider
+        if (businessFormData.accountType == null || businessFormData.accountType != 'business') {
+          print('DEBUG: Setting account type in business form provider');
+          ref.read(businessOnboardingFormProvider.notifier).setAccountType('business');
+        }
+
+        // Make sure the business name is set in the business form provider
+        if (businessFormData.businessName == null && formData.displayName != null) {
+          print('DEBUG: Setting business name in business form provider');
+          ref.read(businessOnboardingFormProvider.notifier).setBusinessName(formData.displayName!);
+        }
+
+        // Make sure the username is set in the business form provider
+        if (businessFormData.username == null && formData.username != null) {
+          print('DEBUG: Setting username in business form provider');
+          ref.read(businessOnboardingFormProvider.notifier).setUsername(formData.username!);
+        }
+
+        // Make sure the established date is set in the business form provider
+        if (businessFormData.establishedDate == null && formData.birthday != null) {
+          print('DEBUG: Setting established date in business form provider');
+          ref.read(businessOnboardingFormProvider.notifier).setEstablishedDate(formData.birthday!);
+        }
+
+        // Make sure the phone number is set in the business form provider
+        if (businessFormData.phoneNumber == null && formData.phoneNumber != null) {
+          print('DEBUG: Setting phone number in business form provider');
+          ref.read(businessOnboardingFormProvider.notifier).setPhoneNumber(formData.phoneNumber!);
+        }
+
+        // Make sure the profile image is set in the business form provider
+        if (businessFormData.profileImageUrl == null && formData.profileImageUrl != null) {
+          print('DEBUG: Setting profile image in business form provider');
+          ref.read(businessOnboardingFormProvider.notifier).setProfileImage(formData.profileImageUrl!);
+        }
+
+        // Make sure the business types are set in the business form provider
+        if ((businessFormData.businessTypes == null || businessFormData.businessTypes!.isEmpty) &&
+            formData.interests != null && formData.interests!.isNotEmpty) {
+          print('DEBUG: Setting business types in business form provider');
+          ref.read(businessOnboardingFormProvider.notifier).setBusinessTypes(formData.interests!);
+        }
+
+        // Check again if the form is complete
+        businessFormData = ref.read(businessOnboardingFormProvider);
+        if (!businessFormData.isComplete()) {
+          print('DEBUG: Business form is still incomplete!');
+          print('DEBUG: accountType: ${businessFormData.accountType}');
+          print('DEBUG: businessName: ${businessFormData.businessName}');
+          print('DEBUG: username: ${businessFormData.username}');
+          print('DEBUG: establishedDate: ${businessFormData.establishedDate}');
+          print('DEBUG: phoneNumber: ${businessFormData.phoneNumber}');
+          print('DEBUG: profileImageUrl: ${businessFormData.profileImageUrl}');
+          print('DEBUG: businessTypes: ${businessFormData.businessTypes}');
+          throw Exception('Please complete all steps');
+        }
+      } else {
+        if (!formData.isComplete()) {
+          print('DEBUG: Personal form is incomplete!');
+          throw Exception('Please complete all steps');
+        }
       }
 
       // Get services
@@ -163,16 +256,33 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       // Then save to Firebase
       try {
         print('DEBUG: Saving to Firebase...');
-        print('DEBUG: Phone number being sent to Firebase: ${formData.phoneNumber}');
-        await firebaseService.saveUserProfile(
-          accountType: formData.accountType,
-          displayName: formData.displayName,
-          username: formData.username,
-          birthday: formData.birthday,
-          phoneNumber: formData.phoneNumber,
-          profileImageUrl: formData.profileImageUrl,
-          interests: formData.interests,
-        );
+
+        if (isBusiness && businessFormData != null) {
+          // For business accounts
+          print('DEBUG: Saving business data to Firebase');
+          await firebaseService.saveUserProfile(
+            accountType: businessFormData.accountType,
+            displayName: businessFormData.businessName,
+            username: businessFormData.username,
+            phoneNumber: businessFormData.phoneNumber,
+            profileImageUrl: businessFormData.profileImageUrl,
+            establishedDate: businessFormData.establishedDate,
+            businessTypes: businessFormData.businessTypes,
+          );
+        } else {
+          // For personal accounts
+          print('DEBUG: Saving personal data to Firebase');
+          await firebaseService.saveUserProfile(
+            accountType: formData.accountType,
+            displayName: formData.displayName,
+            username: formData.username,
+            birthday: formData.birthday,
+            phoneNumber: formData.phoneNumber,
+            profileImageUrl: formData.profileImageUrl,
+            interests: formData.interests,
+          );
+        }
+
         print('DEBUG: Successfully saved to Firebase');
       } catch (e) {
         print('DEBUG: Error saving to Firebase: $e');
@@ -183,6 +293,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
       // Set onboardingCompleted to true in the form data
       ref.read(onboardingFormProvider.notifier).setOnboardingCompleted(true);
+      if (isBusiness && businessFormData != null) {
+        ref.read(businessOnboardingFormProvider.notifier).setOnboardingCompleted(true);
+      }
 
       // Get the updated form data with onboardingCompleted = true
       final updatedFormData = ref.read(onboardingFormProvider);
@@ -192,6 +305,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
       // Reset form data
       ref.read(onboardingFormProvider.notifier).reset();
+      if (isBusiness) {
+        ref.read(businessOnboardingFormProvider.notifier).reset();
+      }
 
       // Reset submitting state
       if (mounted) {
@@ -382,6 +498,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Widget _buildCurrentPage() {
+    // Get the account type to determine which steps to show
+    final formData = ref.read(onboardingFormProvider);
+    final accountType = formData.accountType;
+    final isBusiness = accountType == 'business';
+
     switch (_currentPage) {
       case 0:
         return AccountTypeStep(
@@ -402,10 +523,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           },
         );
       case 2:
-        return BirthdayStep(
-          onNext: _nextPage,
-          onBack: _previousPage,
-        );
+        // Use EstablishedInStep for business accounts, BirthdayStep for personal accounts
+        return isBusiness
+            ? EstablishedInStep(
+                onNext: _nextPage,
+                onBack: _previousPage,
+              )
+            : BirthdayStep(
+                onNext: _nextPage,
+                onBack: _previousPage,
+              );
       case 3:
         return PhoneStep(
           onNext: _nextPage,
@@ -422,29 +549,40 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           },
         );
       case 5:
-        return InterestsStep(
-          onNext: _submitOnboarding,
-          onBack: _previousPage,
-        );
+        // Use BusinessTypeStep for business accounts, InterestsStep for personal accounts
+        return isBusiness
+            ? BusinessTypeStep(
+                onNext: _submitOnboarding,
+                onBack: _previousPage,
+              )
+            : InterestsStep(
+                onNext: _submitOnboarding,
+                onBack: _previousPage,
+              );
       default:
         return const SizedBox.shrink();
     }
   }
 
   String _getStepTitle(int step) {
+    // Get the account type to determine which titles to show
+    final formData = ref.read(onboardingFormProvider);
+    final accountType = formData.accountType;
+    final isBusiness = accountType == 'business';
+
     switch (step) {
       case 0:
         return 'Choose Account Type';
       case 1:
-        return 'Create Your Profile';
+        return isBusiness ? 'What\'s the name of your Business?' : 'Create Your Profile';
       case 2:
-        return 'When Were You Born?';
+        return isBusiness ? 'When was your business established?' : 'When Were You Born?';
       case 3:
-        return 'Verify Your Phone';
+        return isBusiness ? 'What\'s the primary number to your business?' : 'Verify Your Phone';
       case 4:
-        return 'Add Profile Picture';
+        return isBusiness ? 'Upload an image to represent your business' : 'Add Profile Picture';
       case 5:
-        return 'Select Your Interests';
+        return isBusiness ? 'What services do you offer?' : 'Select Your Interests';
       default:
         return '';
     }
@@ -452,20 +590,33 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   bool _isNextButtonEnabled() {
     final formData = ref.read(onboardingFormProvider);
+    final accountType = formData.accountType;
+    final isBusiness = accountType == 'business';
+
+    // For business accounts, we need to check the business form provider for some steps
+    final businessFormData = isBusiness ? ref.read(businessOnboardingFormProvider) : null;
 
     switch (_currentPage) {
       case 0: // Account Type Step
         return formData.accountType != null && formData.accountType!.isNotEmpty;
       case 1: // Display Name Step
         return _isDisplayNameValid;
-      case 2: // Birthday Step
-        return formData.birthday != null;
+      case 2: // Birthday Step (personal) or Established In Step (business)
+        if (isBusiness) {
+          return businessFormData?.establishedDate != null;
+        } else {
+          return formData.birthday != null;
+        }
       case 3: // Phone Step
         return _isPhoneValid;
       case 4: // Profile Image Step
         return _isProfileImageValid;
-      case 5: // Interests Step
-        return formData.interests != null && formData.interests!.isNotEmpty;
+      case 5: // Interests Step (personal) or Business Type Step (business)
+        if (isBusiness) {
+          return businessFormData?.businessTypes != null && businessFormData!.businessTypes!.isNotEmpty;
+        } else {
+          return formData.interests != null && formData.interests!.isNotEmpty;
+        }
       default:
         return false;
     }

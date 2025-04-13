@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/onboarding_form_provider.dart';
+import '../../../providers/business_onboarding_form_provider.dart';
 
 class PhoneStep extends ConsumerStatefulWidget {
   final VoidCallback onNext;
@@ -41,14 +42,32 @@ class _PhoneStepState extends ConsumerState<PhoneStep> {
 
   void _loadSavedData() {
     final formData = ref.read(onboardingFormProvider);
-    if (formData.phoneNumber != null) {
-      // Remove country code if it exists in saved data
-      String savedNumber = formData.phoneNumber!;
-      if (savedNumber.startsWith(_countryCode)) {
-        savedNumber = savedNumber.substring(_countryCode.length);
+    final accountType = formData.accountType;
+
+    // Check if this is a business account
+    if (accountType == 'business') {
+      final businessFormData = ref.read(businessOnboardingFormProvider);
+
+      if (businessFormData.phoneNumber != null) {
+        // Remove country code if it exists in saved data
+        String savedNumber = businessFormData.phoneNumber!;
+        if (savedNumber.startsWith(_countryCode)) {
+          savedNumber = savedNumber.substring(_countryCode.length);
+        }
+        _phoneController.text = savedNumber;
+        _validateInput(savedNumber);
       }
-      _phoneController.text = savedNumber;
-      _validateInput(savedNumber);
+    } else {
+      // Personal account
+      if (formData.phoneNumber != null) {
+        // Remove country code if it exists in saved data
+        String savedNumber = formData.phoneNumber!;
+        if (savedNumber.startsWith(_countryCode)) {
+          savedNumber = savedNumber.substring(_countryCode.length);
+        }
+        _phoneController.text = savedNumber;
+        _validateInput(savedNumber);
+      }
     }
   }
 
@@ -78,15 +97,20 @@ class _PhoneStepState extends ConsumerState<PhoneStep> {
 
       // Combine country code with phone number
       final fullPhoneNumber = '$_countryCode$phoneNumberOnly';
-      print('DEBUG: Phone number to save: $fullPhoneNumber');
 
-      // Save to provider
-      ref.read(onboardingFormProvider.notifier).setPhoneNumber(fullPhoneNumber);
-      print('DEBUG: Phone number saved: $fullPhoneNumber');
-
-      // Verify the data was saved by reading it back
+      // Get account type
       final formData = ref.read(onboardingFormProvider);
-      print('DEBUG: Verification - Phone number in provider: ${formData.phoneNumber}');
+      final accountType = formData.accountType;
+
+      // Save to the appropriate form provider based on account type
+      if (accountType == 'business') {
+        // For business accounts, save to both form providers
+        ref.read(businessOnboardingFormProvider.notifier).setPhoneNumber(fullPhoneNumber);
+        ref.read(onboardingFormProvider.notifier).setPhoneNumber(fullPhoneNumber);
+      } else {
+        // For personal accounts, save to personal form provider
+        ref.read(onboardingFormProvider.notifier).setPhoneNumber(fullPhoneNumber);
+      }
 
       // Call onNext to navigate to the next page
       widget.onNext();
@@ -134,7 +158,6 @@ class _PhoneStepState extends ConsumerState<PhoneStep> {
                 prefixStyle: const TextStyle(
                   fontSize: 16,
                 ),
-                hintText: _exampleNumber,
               ),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import '../../../providers/onboarding_form_provider.dart';
+import '../../../providers/business_onboarding_form_provider.dart';
 import '../../../providers/firebase_provider.dart';
 
 class ProfileImageStep extends ConsumerStatefulWidget {
@@ -27,8 +28,6 @@ class _ProfileImageStepState extends ConsumerState<ProfileImageStep> {
   String? _errorMessage;
   bool _isLoading = false;
 
-  String? _savedImageUrl;
-
   @override
   void initState() {
     super.initState();
@@ -48,7 +47,6 @@ class _ProfileImageStepState extends ConsumerState<ProfileImageStep> {
       if (savedImageUrl != null && savedImageUrl.isNotEmpty) {
         setState(() {
           _isLoading = true;
-          _savedImageUrl = savedImageUrl;
         });
 
         // We don't actually load the image here as it would require downloading
@@ -222,15 +220,21 @@ class _ProfileImageStepState extends ConsumerState<ProfileImageStep> {
       final firebaseService = ref.read(firebaseServiceProvider);
       final imageUrl = await firebaseService.uploadProfileImage(_imageFile!);
 
-
-
       setState(() {
-        _savedImageUrl = imageUrl;
         _isUploading = false;
       });
 
+      // Save to the appropriate form provider based on account type
+      final formData = ref.read(onboardingFormProvider);
+      final isBusiness = formData.accountType == 'business';
+
+      // Save to personal form provider
       ref.read(onboardingFormProvider.notifier).setProfileImage(imageUrl);
-      print('DEBUG: Profile image URL saved: $imageUrl');
+
+      // Also save to business form provider if this is a business account
+      if (isBusiness) {
+        ref.read(businessOnboardingFormProvider.notifier).setProfileImage(imageUrl);
+      }
 
       // Notify parent that the image is valid
       widget.onValidityChanged(true);
@@ -283,6 +287,20 @@ class _ProfileImageStepState extends ConsumerState<ProfileImageStep> {
   }
 
   Widget _buildImageSelector(ColorScheme colorScheme) {
+    // Check if this is a business account
+    final formData = ref.read(onboardingFormProvider);
+    final isBusiness = formData.accountType == 'business';
+
+    // Define border color based on account type
+    final borderColor = isBusiness
+        ? const Color(0xFFFFD700) // Gold color for business accounts
+        : _imageFile != null
+            ? colorScheme.primary
+            : colorScheme.outline;
+
+    // Define border width based on account type
+    final borderWidth = isBusiness ? 3.0 : 2.0;
+
     return GestureDetector(
       key: const Key('image_selector'),
       onTap: _showImageSourceDialog,
@@ -299,16 +317,25 @@ class _ProfileImageStepState extends ConsumerState<ProfileImageStep> {
                 )
               : null,
           border: Border.all(
-            color:
-                _imageFile != null ? colorScheme.primary : colorScheme.outline,
-            width: 2,
+            color: borderColor,
+            width: borderWidth,
           ),
+          // Add a subtle shadow for business accounts
+          boxShadow: isBusiness
+              ? const [
+                  BoxShadow(
+                    color: Color.fromRGBO(255, 215, 0, 0.5), // Gold color with 0.5 opacity
+                    blurRadius: 10,
+                    spreadRadius: 2,
+                  )
+                ]
+              : null,
         ),
         child: _imageFile == null
             ? Icon(
                 Icons.add_a_photo,
                 size: 48,
-                color: colorScheme.primary,
+                color: isBusiness ? Colors.white : colorScheme.primary,
               )
             : Stack(
                 alignment: Alignment.center,
@@ -319,10 +346,10 @@ class _ProfileImageStepState extends ConsumerState<ProfileImageStep> {
                       color: Colors.black.withAlpha(128), // 0.5 opacity
                     ),
                   ),
-                  const Icon(
+                  Icon(
                     Icons.edit,
                     size: 48,
-                    color: Colors.white,
+                    color: isBusiness ? Colors.white : Colors.white,
                   ),
                 ],
               ),

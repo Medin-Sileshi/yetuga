@@ -1,26 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../providers/business_onboarding_form_provider.dart';
 import '../../../providers/onboarding_form_provider.dart';
 
-class BirthdayStep extends ConsumerStatefulWidget {
+class EstablishedInStep extends ConsumerStatefulWidget {
   final VoidCallback onNext;
   final VoidCallback onBack;
 
-  const BirthdayStep({
+  const EstablishedInStep({
     super.key,
     required this.onNext,
     required this.onBack,
   });
 
   @override
-  ConsumerState<BirthdayStep> createState() => _BirthdayStepState();
+  ConsumerState<EstablishedInStep> createState() => _EstablishedInStepState();
 }
 
-class _BirthdayStepState extends ConsumerState<BirthdayStep> {
+class _EstablishedInStepState extends ConsumerState<EstablishedInStep> {
   DateTime? _selectedDate;
   String? _error;
-  final int _minAge = 14;
-  final int _maxAge = 100;
+  final int _minYearsAgo = 1;
+  final int _maxYearsAgo = 100;
 
   // Month names for display
   final List<String> _monthNames = [
@@ -35,46 +36,31 @@ class _BirthdayStepState extends ConsumerState<BirthdayStep> {
   }
 
   void _loadSavedData() {
-    final formData = ref.read(onboardingFormProvider);
-    if (formData.birthday != null) {
+    final formData = ref.read(businessOnboardingFormProvider);
+    if (formData.establishedDate != null) {
       setState(() {
-        _selectedDate = formData.birthday;
+        _selectedDate = formData.establishedDate;
       });
     } else {
-      // Set default date to 18 years ago
+      // Set default date to 5 years ago
       final now = DateTime.now();
       setState(() {
-        _selectedDate = DateTime(now.year - 18, now.month, now.day);
+        _selectedDate = DateTime(now.year - 5, now.month, 1);
       });
     }
-  }
-
-  bool _isValidAge(DateTime date) {
-    final now = DateTime.now();
-    final age = now.year - date.year;
-    if (now.month < date.month ||
-        (now.month == date.month && now.day < date.day)) {
-      return age - 1 >= _minAge;
-    }
-    return age >= _minAge;
   }
 
   void _selectDate(DateTime date) {
-    if (!_isValidAge(date)) {
-      setState(() {
-        _error = 'You must be at least $_minAge years old';
-      });
-      return;
-    }
-
     setState(() {
-      _selectedDate = date;
+      // Always set day to 1 for business established date
+      _selectedDate = DateTime(date.year, date.month, 1);
       _error = null;
     });
-    ref.read(onboardingFormProvider.notifier).setBirthday(date);
+
+    // Save to both form providers
+    ref.read(businessOnboardingFormProvider.notifier).setEstablishedDate(date);
+    ref.read(onboardingFormProvider.notifier).setBirthday(date); // Use birthday field for compatibility
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -84,21 +70,6 @@ class _BirthdayStepState extends ConsumerState<BirthdayStep> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Day wheel
-            _buildDateWheel(
-              items: List.generate(31, (i) => (i + 1).toString().padLeft(2, '0')),
-              selectedValue: _selectedDate?.day.toString().padLeft(2, '0'),
-              onChanged: (value) {
-                if (_selectedDate != null) {
-                  _selectDate(DateTime(
-                    _selectedDate!.year,
-                    _selectedDate!.month,
-                    int.parse(value),
-                  ));
-                }
-              },
-            ),
-            const SizedBox(width: 16),
             // Month wheel (spelled out)
             _buildMonthWheel(
               items: _monthNames,
@@ -108,17 +79,17 @@ class _BirthdayStepState extends ConsumerState<BirthdayStep> {
                   _selectDate(DateTime(
                     _selectedDate!.year,
                     _monthNames.indexOf(value) + 1,
-                    _selectedDate!.day,
+                    1, // Always use day 1
                   ));
                 }
               },
             ),
             const SizedBox(width: 16),
             // Year wheel
-            _buildDateWheel(
+            _buildYearWheel(
               items: List.generate(
-                _maxAge - _minAge + 1,
-                (i) => (DateTime.now().year - _minAge - i).toString(),
+                _maxYearsAgo - _minYearsAgo + 1,
+                (i) => (DateTime.now().year - _minYearsAgo - i).toString(),
               ),
               selectedValue: _selectedDate?.year.toString(),
               onChanged: (value) {
@@ -126,7 +97,7 @@ class _BirthdayStepState extends ConsumerState<BirthdayStep> {
                   _selectDate(DateTime(
                     int.parse(value),
                     _selectedDate!.month,
-                    _selectedDate!.day,
+                    1, // Always use day 1
                   ));
                 }
               },
@@ -144,43 +115,7 @@ class _BirthdayStepState extends ConsumerState<BirthdayStep> {
               ),
             ),
           ),
-
       ],
-    );
-  }
-
-  Widget _buildDateWheel({
-    required List<String> items,
-    required String? selectedValue,
-    required ValueChanged<String> onChanged,
-  }) {
-    return SizedBox(
-      width: 80,
-      height: 200,
-      child: ListWheelScrollView(
-        itemExtent: 60,
-        diameterRatio: 2.5,
-        perspective: 0.002,
-        physics: const FixedExtentScrollPhysics(),
-        children: items.map((item) {
-          final isSelected = item == selectedValue;
-          return Center(
-            child: Text(
-              item,
-              style: TextStyle(
-                fontSize: isSelected ? 32 : 24,
-                color: isSelected
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.onSurface.withAlpha(128), // 0.5 opacity
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          );
-        }).toList(),
-        onSelectedItemChanged: (index) {
-          onChanged(items[index]);
-        },
-      ),
     );
   }
 
@@ -204,6 +139,41 @@ class _BirthdayStepState extends ConsumerState<BirthdayStep> {
               item,
               style: TextStyle(
                 fontSize: isSelected ? 24 : 18,
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurface.withAlpha(128), // 0.5 opacity
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          );
+        }).toList(),
+        onSelectedItemChanged: (index) {
+          onChanged(items[index]);
+        },
+      ),
+    );
+  }
+
+  Widget _buildYearWheel({
+    required List<String> items,
+    required String? selectedValue,
+    required ValueChanged<String> onChanged,
+  }) {
+    return SizedBox(
+      width: 80,
+      height: 200,
+      child: ListWheelScrollView(
+        itemExtent: 60,
+        diameterRatio: 2.5,
+        perspective: 0.002,
+        physics: const FixedExtentScrollPhysics(),
+        children: items.map((item) {
+          final isSelected = item == selectedValue;
+          return Center(
+            child: Text(
+              item,
+              style: TextStyle(
+                fontSize: isSelected ? 32 : 24,
                 color: isSelected
                     ? Theme.of(context).colorScheme.primary
                     : Theme.of(context).colorScheme.onSurface.withAlpha(128), // 0.5 opacity

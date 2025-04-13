@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/onboarding_form_provider.dart';
+import '../../../providers/business_onboarding_form_provider.dart';
 import '../../../providers/firebase_provider.dart';
 
 class DisplayNameStep extends ConsumerStatefulWidget {
@@ -45,18 +46,38 @@ class _DisplayNameStepState extends ConsumerState<DisplayNameStep> {
 
   void _loadSavedData() {
     final formData = ref.read(onboardingFormProvider);
+    final accountType = formData.accountType;
 
-    if (formData.displayName != null) {
-      _nameController.text = formData.displayName!;
-    }
+    // Check if this is a business account
+    if (accountType == 'business') {
+      final businessFormData = ref.read(businessOnboardingFormProvider);
 
-    if (formData.username != null) {
-      _usernameController.text = formData.username!;
-      _isUsernameValid = true;
-      _isNextButtonEnabled = true;
-      _notifyValidityChanged(true);
-    } else if (formData.displayName != null) {
-      _generateUsername(formData.displayName!);
+      if (businessFormData.businessName != null) {
+        _nameController.text = businessFormData.businessName!;
+      }
+
+      if (businessFormData.username != null) {
+        _usernameController.text = businessFormData.username!;
+        _isUsernameValid = true;
+        _isNextButtonEnabled = true;
+        _notifyValidityChanged(true);
+      } else if (businessFormData.businessName != null) {
+        _generateUsername(businessFormData.businessName!);
+      }
+    } else {
+      // Personal account
+      if (formData.displayName != null) {
+        _nameController.text = formData.displayName!;
+      }
+
+      if (formData.username != null) {
+        _usernameController.text = formData.username!;
+        _isUsernameValid = true;
+        _isNextButtonEnabled = true;
+        _notifyValidityChanged(true);
+      } else if (formData.displayName != null) {
+        _generateUsername(formData.displayName!);
+      }
     }
   }
 
@@ -75,8 +96,19 @@ class _DisplayNameStepState extends ConsumerState<DisplayNameStep> {
       _isEditingUsername = false;
     });
 
-    // Save the username to the form provider
-    ref.read(onboardingFormProvider.notifier).setUsername(username);
+    // Get account type
+    final formData = ref.read(onboardingFormProvider);
+    final accountType = formData.accountType;
+
+    // Save the username to the appropriate form provider
+    if (accountType == 'business') {
+      // Save to both form providers for business accounts
+      ref.read(businessOnboardingFormProvider.notifier).setUsername(username);
+      ref.read(onboardingFormProvider.notifier).setUsername(username);
+    } else {
+      // Save to personal form provider
+      ref.read(onboardingFormProvider.notifier).setUsername(username);
+    }
 
     // Automatically check username availability
     _checkUsernameAvailability(username);
@@ -167,18 +199,29 @@ class _DisplayNameStepState extends ConsumerState<DisplayNameStep> {
       final username = _usernameController.text;
 
       try {
-        // Save to form provider
-        ref.read(onboardingFormProvider.notifier).setDisplayName(displayName);
-        ref.read(onboardingFormProvider.notifier).setUsername(username);
-        print('DEBUG: Display name saved: $displayName');
-        print('DEBUG: Username saved: $username');
-
-        // Verify the data was saved by reading it back
+        // Get account type
         final formData = ref.read(onboardingFormProvider);
-        print(
-            'DEBUG: Verification - Display name in provider: ${formData.displayName}');
-        print(
-            'DEBUG: Verification - Username in provider: ${formData.username}');
+        final accountType = formData.accountType;
+
+        if (accountType == 'business') {
+          // For business accounts, save to both form providers
+          ref.read(businessOnboardingFormProvider.notifier).setBusinessName(displayName);
+          ref.read(businessOnboardingFormProvider.notifier).setUsername(username);
+
+          // Also save to personal form provider for compatibility
+          ref.read(onboardingFormProvider.notifier).setDisplayName(displayName);
+          ref.read(onboardingFormProvider.notifier).setUsername(username);
+
+          print('DEBUG: Business name saved: $displayName');
+          print('DEBUG: Business username saved: $username');
+        } else {
+          // For personal accounts, save to personal form provider
+          ref.read(onboardingFormProvider.notifier).setDisplayName(displayName);
+          ref.read(onboardingFormProvider.notifier).setUsername(username);
+
+          print('DEBUG: Display name saved: $displayName');
+          print('DEBUG: Username saved: $username');
+        }
 
         // Call onNext to navigate to the next page
         widget.onNext();

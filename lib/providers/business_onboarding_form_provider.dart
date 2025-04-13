@@ -1,28 +1,29 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/onboarding_data.dart';
+import '../models/business_onboarding_data.dart';
 import 'base_form_notifier.dart';
+import '../utils/logger.dart';
 
-/// Provider that stores onboarding form data in memory only
+/// Provider that stores business onboarding form data in memory only
 /// This avoids the need to save to Hive after each step
-final onboardingFormProvider =
-    StateNotifierProvider<OnboardingFormNotifier, OnboardingData>((ref) {
-  return OnboardingFormNotifier();
+final businessOnboardingFormProvider =
+    StateNotifierProvider<BusinessOnboardingFormNotifier, BusinessOnboardingData>((ref) {
+  return BusinessOnboardingFormNotifier();
 });
 
-class OnboardingFormNotifier extends BaseFormNotifier<OnboardingData> {
-  OnboardingFormNotifier() : super(OnboardingData(), 'OnboardingForm');
+class BusinessOnboardingFormNotifier extends BaseFormNotifier<BusinessOnboardingData> {
+  BusinessOnboardingFormNotifier() : super(BusinessOnboardingData(), 'BusinessForm');
 
   @override
   void updateField(String fieldName, dynamic value) {
     // Create a new state object with all existing values
-    final updatedData = OnboardingData()
+    final updatedData = BusinessOnboardingData()
       ..accountType = state.accountType
-      ..displayName = state.displayName
+      ..businessName = state.businessName
       ..username = state.username
-      ..birthday = state.birthday
+      ..establishedDate = state.establishedDate
       ..phoneNumber = state.phoneNumber
       ..profileImageUrl = state.profileImageUrl
-      ..interests = state.interests
+      ..businessTypes = state.businessTypes
       ..onboardingCompleted = state.onboardingCompleted;
 
     // Update the specific field
@@ -30,14 +31,14 @@ class OnboardingFormNotifier extends BaseFormNotifier<OnboardingData> {
       case 'accountType':
         updatedData.accountType = value as String;
         break;
-      case 'displayName':
-        updatedData.displayName = value as String;
+      case 'businessName':
+        updatedData.businessName = value as String;
         break;
       case 'username':
         updatedData.username = value as String;
         break;
-      case 'birthday':
-        updatedData.birthday = value as DateTime;
+      case 'establishedDate':
+        updatedData.establishedDate = value as DateTime;
         break;
       case 'phoneNumber':
         updatedData.phoneNumber = value as String;
@@ -45,8 +46,8 @@ class OnboardingFormNotifier extends BaseFormNotifier<OnboardingData> {
       case 'profileImageUrl':
         updatedData.profileImageUrl = value as String;
         break;
-      case 'interests':
-        updatedData.interests = value as List<String>;
+      case 'businessTypes':
+        updatedData.businessTypes = value as List<String>;
         break;
       case 'onboardingCompleted':
         updatedData.onboardingCompleted = value as bool;
@@ -62,16 +63,16 @@ class OnboardingFormNotifier extends BaseFormNotifier<OnboardingData> {
     updateField('accountType', type);
   }
 
-  void setDisplayName(String name) {
-    updateField('displayName', name);
+  void setBusinessName(String name) {
+    updateField('businessName', name);
   }
 
   void setUsername(String username) {
     updateField('username', username);
   }
 
-  void setBirthday(DateTime birthday) {
-    updateField('birthday', birthday);
+  void setEstablishedDate(DateTime date) {
+    updateField('establishedDate', date);
   }
 
   void setPhoneNumber(String phone) {
@@ -82,8 +83,8 @@ class OnboardingFormNotifier extends BaseFormNotifier<OnboardingData> {
     updateField('profileImageUrl', imageUrl);
   }
 
-  void setInterests(List<String> interests) {
-    updateField('interests', interests);
+  void setBusinessTypes(List<String> types) {
+    updateField('businessTypes', types);
   }
 
   void setOnboardingCompleted(bool completed) {
@@ -92,6 +93,6 @@ class OnboardingFormNotifier extends BaseFormNotifier<OnboardingData> {
 
   @override
   void reset() {
-    state = OnboardingData();
+    state = BusinessOnboardingData();
   }
 }
