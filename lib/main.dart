@@ -12,6 +12,7 @@ import 'screens/auth/auth_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding/onboarding_screen.dart';
 import 'providers/theme_provider.dart';
+import 'services/user_cache_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/logger.dart';
 
@@ -48,9 +49,14 @@ void main() async {
   try {
     await Hive.openBox<OnboardingData>('onboarding');
     await Hive.openBox<OnboardingCache>('onboarding_cache');
+    await Hive.openBox('user_cache'); // Open the user cache box
     Logger.d('Main', 'Hive boxes opened successfully');
+
+    // Initialize the user cache service
+    await userCacheService.init();
+    Logger.d('Main', 'User cache service initialized');
   } catch (e) {
-    Logger.d('Main', 'Error opening Hive boxes: $e');
+    Logger.d('Main', 'Error opening Hive boxes or initializing cache service: $e');
   }
 
   runApp(const ProviderScope(child: MyApp()));
