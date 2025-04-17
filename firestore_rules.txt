@@ -1,0 +1,89 @@
+// Firestore security rules for Yetuga app including follow functionality
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isValidUserData(data) {
+      return data.keys().hasAll(['accountType', 'displayName', 'username']) &&
+        (data.accountType == 'personal' || data.accountType == 'business') &&
+        data.displayName is string && data.displayName.size() > 0 &&
+        data.username is string && data.username.size() > 0;
+    }
+
+    function isValidFollowData(data) {
+      return data.keys().hasAll(['userId', 'displayName', 'username', 'followedAt']) &&
+        data.userId is string && data.userId.size() > 0 &&
+        data.displayName is string &&
+        data.username is string &&
+        data.followedAt is timestamp;
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId) && isValidUserData(request.resource.data);
+
+      // Allow updating user document with follow counts
+      allow update: if (
+        // Owner can update their own profile with valid data
+        (isOwner(userId) && isValidUserData(request.resource.data)) ||
+        // Allow incrementing/decrementing followingCount when user follows/unfollows someone
+        (isOwner(userId) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followingCount'])) ||
+        // Allow incrementing/decrementing followersCount when someone follows/unfollows this user
+        (isSignedIn() &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followersCount']))
+      );
+
+      // Following collection - users that this user follows
+      match /following/{followedUserId} {
+        allow read: if isSignedIn();
+
+        // Only the user can modify their own following list
+        allow create: if isOwner(userId) &&
+                       followedUserId != userId && // Can't follow yourself
+                       isValidFollowData(request.resource.data) &&
+                       request.resource.data.userId == followedUserId; // Ensure correct ID
+
+        allow delete: if isOwner(userId);
+      }
+
+      // Followers collection - users who follow this user
+      match /followers/{followerUserId} {
+        allow read: if isSignedIn();
+
+        // Allow a user to add themselves to another user's followers list
+        allow create: if isOwner(followerUserId) &&
+                       followerUserId != userId && // Can't follow yourself
+                       isValidFollowData(request.resource.data) &&
+                       request.resource.data.userId == followerUserId; // Ensure correct ID
+
+        // Allow a user to remove themselves from another user's followers list
+        allow delete: if isOwner(followerUserId);
+      }
+
+      // Events collection
+      match /events/{eventId} {
+        allow read: if isSignedIn();
+        allow create, update, delete: if isOwner(userId);
+      }
+    }
+
+    // Events collection (global)
+    match /events/{eventId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.creatorId == request.auth.uid;
+      allow update, delete: if isSignedIn() &&
+        resource.data.creatorId == request.auth.uid;
+    }
+  }
+}

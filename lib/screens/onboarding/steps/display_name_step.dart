@@ -1,0 +1,474 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../providers/business_onboarding_form_provider.dart';
+import '../../../providers/firebase_provider.dart';
+import '../../../providers/onboarding_form_provider.dart';
+import '../../../utils/logger.dart';
+
+class DisplayNameStep extends ConsumerStatefulWidget {
+  final VoidCallback onNext;
+  final VoidCallback onBack;
+  final Function(bool)? onValidityChanged;
+
+  const DisplayNameStep({
+    super.key,
+    required this.onNext,
+    required this.onBack,
+    this.onValidityChanged,
+  });
+
+  @override
+  ConsumerState<DisplayNameStep> createState() => _DisplayNameStepState();
+}
+
+class _DisplayNameStepState extends ConsumerState<DisplayNameStep> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _usernameController = TextEditingController();
+  bool _isEditingUsername = false;
+  bool _isCheckingUsername = false;
+  bool _isUsernameValid = false;
+  bool _isNextButtonEnabled = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedData();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _usernameController.dispose();
+    super.dispose();
+  }
+
+  void _loadSavedData() {
+    final formData = ref.read(onboardingFormProvider);
+    final accountType = formData.accountType;
+
+    // Check if this is a business account
+    if (accountType == 'business') {
+      final businessFormData = ref.read(businessOnboardingFormProvider);
+
+      if (businessFormData.businessName != null) {
+        _nameController.text = businessFormData.businessName!;
+      }
+
+      if (businessFormData.username != null) {
+        _usernameController.text = businessFormData.username!;
+        _isUsernameValid = true;
+        _isNextButtonEnabled = true;
+        _notifyValidityChanged(true);
+      } else if (businessFormData.businessName != null) {
+        _generateUsername(businessFormData.businessName!);
+      }
+    } else {
+      // Personal account
+      if (formData.displayName != null) {
+        _nameController.text = formData.displayName!;
+      }
+
+      if (formData.username != null) {
+        _usernameController.text = formData.username!;
+        _isUsernameValid = true;
+        _isNextButtonEnabled = true;
+        _notifyValidityChanged(true);
+      } else if (formData.displayName != null) {
+        _generateUsername(formData.displayName!);
+      }
+    }
+  }
+
+  void _generateUsername(String name) {
+    if (name.isEmpty) return;
+
+    // Convert to lowercase and remove spaces
+    String username = name.toLowerCase().replaceAll(' ', '');
+
+    // Remove any non-alphanumeric characters except underscores
+    // First replace underscores with a placeholder
+    username = username.replaceAll('_', 'UNDERSCORE_PLACEHOLDER');
+
+    // Remove all non-alphanumeric characters
+    username = username.replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+    // Restore underscores
+    username = username.replaceAll('UNDERSCOREPLACEHOLDER', '_');
+
+    // Trim to 15 characters if needed
+    if (username.length > 15) {
+      username = username.substring(0, 15);
+    }
+
+    // Ensure it's at least 2 characters
+    if (username.length < 2) {
+      username = username.padRight(2, '0');
+    }
+
+    setState(() {
+      _usernameController.text = username;
+      _isUsernameValid = true;
+      _isEditingUsername = false;
+    });
+
+    // Get account type
+    final formData = ref.read(onboardingFormProvider);
+    final accountType = formData.accountType;
+
+    // Save the username to the appropriate form provider
+    if (accountType == 'business') {
+      // Save to both form providers for business accounts
+      ref.read(businessOnboardingFormProvider.notifier).setUsername(username);
+      ref.read(onboardingFormProvider.notifier).setUsername(username);
+    } else {
+      // Save to personal form provider
+      ref.read(onboardingFormProvider.notifier).setUsername(username);
+    }
+
+    // Automatically check username availability
+    _checkUsernameAvailability(username);
+  }
+
+  void _notifyValidityChanged(bool isValid) {
+    Logger.d('DisplayNameStep', '_notifyValidityChanged called with isValid: $isValid');
+    if (widget.onValidityChanged != null) {
+      widget.onValidityChanged!(isValid);
+      Logger.d('DisplayNameStep', 'Called onValidityChanged callback with: $isValid');
+    } else {
+      Logger.d('DisplayNameStep', 'onValidityChanged callback is null');
+    }
+  }
+
+  Future<void> _checkUsernameAvailability(String username) async {
+    if (username.isEmpty) {
+      setState(() {
+        _isUsernameValid = false;
+        _error = 'Username cannot be empty';
+        _isNextButtonEnabled = false;
+        _isCheckingUsername = false;
+      });
+      _notifyValidityChanged(false);
+      return;
+    }
+
+    // Trim any whitespace
+    username = username.trim();
+
+    // Validate username format - now allowing underscores
+    if (username.length < 2 || username.length > 15) {
+      setState(() {
+        _isUsernameValid = false;
+        _error = 'Username must be 2-15 characters long';
+        _isNextButtonEnabled = false;
+        _isCheckingUsername = false;
+      });
+      _notifyValidityChanged(false);
+      return;
+    }
+
+    if (!RegExp(r'^[a-z0-9_]+$').hasMatch(username)) {
+      setState(() {
+        _isUsernameValid = false;
+        _error = 'Username must contain only lowercase letters, numbers, and underscores';
+        _isNextButtonEnabled = false;
+        _isCheckingUsername = false;
+      });
+      _notifyValidityChanged(false);
+      return;
+    }
+
+    setState(() {
+      _isCheckingUsername = true;
+      _error = null;
+    });
+
+    try {
+      final firebaseService = ref.read(firebaseServiceProvider);
+      final isAvailable = await firebaseService.isUsernameAvailable(username);
+
+      setState(() {
+        _isUsernameValid = isAvailable;
+        _error = isAvailable ? null : 'Username is already taken';
+        _isEditingUsername = false;
+        _isNextButtonEnabled = isAvailable && _nameController.text.isNotEmpty;
+        _isCheckingUsername = false;
+      });
+
+      // Save the username to the form providers if it's valid
+      if (isAvailable) {
+        // Get account type
+        final formData = ref.read(onboardingFormProvider);
+        final accountType = formData.accountType;
+
+        // Save to the appropriate form provider
+        if (accountType == 'business') {
+          // Save to both form providers for business accounts
+          ref.read(businessOnboardingFormProvider.notifier).setUsername(username);
+          ref.read(onboardingFormProvider.notifier).setUsername(username);
+        } else {
+          // Save to personal form provider
+          ref.read(onboardingFormProvider.notifier).setUsername(username);
+        }
+      }
+
+      _notifyValidityChanged(_isNextButtonEnabled);
+    } catch (e) {
+      setState(() {
+        _error = 'Error checking username: $e';
+        _isUsernameValid = false;
+        _isNextButtonEnabled = false;
+        _isCheckingUsername = false;
+      });
+      _notifyValidityChanged(false);
+    }
+  }
+
+  // This method is now public so it can be called from the onboarding screen
+  void validateAndSave() async {
+    if (_formKey.currentState?.validate() ?? false) {
+      if (!_isUsernameValid) {
+        setState(() {
+          _error = 'Please enter a valid username';
+        });
+        return;
+      }
+
+      // Save the display name and username
+      final displayName = _nameController.text;
+      final username = _usernameController.text;
+
+      try {
+        // Get account type
+        final formData = ref.read(onboardingFormProvider);
+        final accountType = formData.accountType;
+
+        // Check if the username in the form provider matches the current username
+        // This ensures we respect any edits the user has made
+        final currentUsername = accountType == 'business'
+            ? ref.read(businessOnboardingFormProvider).username
+            : formData.username;
+
+        // If the username has changed or is not set in the provider, check availability
+        if (currentUsername != username) {
+          // Check username availability one last time
+          final firebaseService = ref.read(firebaseServiceProvider);
+          final isAvailable = await firebaseService.isUsernameAvailable(username);
+
+          if (!isAvailable) {
+            setState(() {
+              _error = 'Username is already taken';
+              _isUsernameValid = false;
+            });
+            return;
+          }
+        }
+
+        if (accountType == 'business') {
+          // For business accounts, save to both form providers
+          ref.read(businessOnboardingFormProvider.notifier).setBusinessName(displayName);
+          ref.read(businessOnboardingFormProvider.notifier).setUsername(username);
+
+          // Also save to personal form provider for compatibility
+          ref.read(onboardingFormProvider.notifier).setDisplayName(displayName);
+          ref.read(onboardingFormProvider.notifier).setUsername(username);
+
+          Logger.d('DisplayNameStep', 'Business name saved: $displayName');
+          Logger.d('DisplayNameStep', 'Business username saved: $username');
+        } else {
+          // For personal accounts, save to personal form provider
+          ref.read(onboardingFormProvider.notifier).setDisplayName(displayName);
+          ref.read(onboardingFormProvider.notifier).setUsername(username);
+
+          Logger.d('DisplayNameStep', 'Display name saved: $displayName');
+          Logger.d('DisplayNameStep', 'Username saved: $username');
+        }
+
+        // Call onNext to navigate to the next page
+        widget.onNext();
+      } catch (e) {
+        setState(() {
+          _error = 'Failed to save data: $e';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Form(
+      key: _formKey,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Display Name Field
+            TextFormField(
+              controller: _nameController,
+              decoration: InputDecoration(
+                label: const Center(child: Text('name')),
+                labelStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                filled: true,
+                fillColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
+              ),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter your name';
+                }
+                return null;
+              },
+              onChanged: (value) {
+                setState(() {
+                  _isNextButtonEnabled = value.isNotEmpty && _isUsernameValid;
+                });
+                _notifyValidityChanged(_isNextButtonEnabled);
+
+                // Always generate username from the name unless user has manually edited it
+                if (!_isEditingUsername) {
+                  _generateUsername(value);
+                }
+
+                // Save the display name to the form provider
+                ref.read(onboardingFormProvider.notifier).setDisplayName(value);
+              },
+            ),
+            Container(height: 1, color: Theme.of(context).dividerColor),
+            const SizedBox(height: 6),
+            // Username Field
+            Row(
+              children: [
+                const Text(
+                  '@ ',
+                  style: TextStyle(
+                    fontSize: 14,
+                  ),
+                ),
+                Expanded(
+                  child: _isEditingUsername
+                      ? TextField(
+                          controller: _usernameController,
+                          decoration: InputDecoration(
+                            // label: const Text('username'),
+                            labelStyle: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
+                          ),
+                          textAlign: TextAlign.left,
+                          style: const TextStyle(fontSize: 14),
+                          onChanged: (value) {
+                            // Don't check availability on every keystroke
+                            setState(() {
+                              _isUsernameValid = false;
+                              _isNextButtonEnabled = false;
+                            });
+                            _notifyValidityChanged(false);
+
+                            // Store the edited username value
+                            // We'll save it to the provider when the user confirms
+                          },
+                        )
+                      : Text(
+                          _usernameController.text.isEmpty
+                              ? 'username'
+                              : _usernameController.text,
+                          textAlign: TextAlign.left,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withAlpha(153), // 0.6 opacity
+                          ),
+                        ),
+                ),
+                if (_isCheckingUsername)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(Color(0xFF29C7E4)),
+                    ),
+                  )
+                else
+                  IconButton(
+                    icon: Icon(
+                      _isEditingUsername ? Icons.check : Icons.edit,
+                      color: const Color(0xFF29C7E4),
+                      size: 16,
+                    ),
+                    onPressed: () {
+                      if (_isEditingUsername) {
+                        // User is confirming their edit
+                        final editedUsername = _usernameController.text;
+
+                        // Check availability - the method will save if valid
+                        _checkUsernameAvailability(editedUsername);
+
+                        setState(() {
+                          _isEditingUsername = false;
+                        });
+                      } else {
+                        // User wants to edit the username
+                        setState(() {
+                          _isEditingUsername = true;
+                        });
+                      }
+                    },
+                  ),
+              ],
+            ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
