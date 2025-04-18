@@ -1,8 +1,14 @@
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 
 import '../../utils/logger.dart';
@@ -159,6 +165,9 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
     // Create a unique data string for this profile
     final String qrData = 'yetuga://profile/$userId';
 
+    // Create a GlobalKey to capture the QR code as an image
+    final GlobalKey qrKey = GlobalKey();
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -173,40 +182,104 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
-          Container(
-            width: 250,
-            height: 250,
-            padding: const EdgeInsets.all(16.0),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16.0),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(26), // ~0.1 opacity
-                  spreadRadius: 1,
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: QrImageView(
-              data: qrData,
-              version: QrVersions.auto,
-              size: 220.0,
-              backgroundColor: Colors.white,
-              eyeStyle: const QrEyeStyle(
-                eyeShape: QrEyeShape.square,
-                color: Colors.black,
+          RepaintBoundary(
+            key: qrKey,
+            child: Container(
+              width: 250,
+              height: 250,
+              padding: const EdgeInsets.all(16.0),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(26), // ~0.1 opacity
+                    spreadRadius: 1,
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-              dataModuleStyle: const QrDataModuleStyle(
-                dataModuleShape: QrDataModuleShape.square,
-                color: Colors.black,
+              child: QrImageView(
+                data: qrData,
+                version: QrVersions.auto,
+                size: 220.0,
+                backgroundColor: Colors.white,
+                eyeStyle: const QrEyeStyle(
+                  eyeShape: QrEyeShape.square,
+                  color: Colors.black,
+                ),
+                dataModuleStyle: const QrDataModuleStyle(
+                  dataModuleShape: QrDataModuleShape.square,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () => _downloadQrCode(context, qrKey, 'profile_${userId}_qr'),
+            icon: const Icon(Icons.download),
+            label: const Text('Download QR Code'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8.0),
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  // Download QR code as image
+  Future<void> _downloadQrCode(BuildContext context, GlobalKey qrKey, String fileName) async {
+    try {
+      // Find the RenderRepaintBoundary
+      final RenderRepaintBoundary boundary = qrKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+
+      // Capture the image
+      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+
+      // Convert to bytes
+      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        throw Exception('Failed to convert image to bytes');
+      }
+
+      final Uint8List pngBytes = byteData.buffer.asUint8List();
+
+      // Get temporary directory
+      final Directory tempDir = await getTemporaryDirectory();
+      final String tempPath = tempDir.path;
+
+      // Create file
+      final File file = File('$tempPath/$fileName.png');
+      await file.writeAsBytes(pngBytes);
+
+      // Share the file
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'QR Code',
+      );
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('QR code shared successfully!'))
+        );
+      }
+    } catch (e) {
+      Logger.e('QrScannerScreen', 'Error downloading QR code', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}'))
+        );
+      }
+    }
   }
 }
 

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/notification_model.dart';
 import '../models/event_model.dart';
 import '../services/push_notification_service.dart';
+import '../services/invitation_service.dart';
 import '../utils/logger.dart';
 
 // Provider for the NotificationService
@@ -29,6 +30,70 @@ class NotificationService {
   Future<String> createJoinRequest(EventModel event) async {
     try {
       Logger.d('NotificationService', 'Creating join request for event: ${event.id}');
+
+      // Ensure we have a user ID
+      if (_currentUserId.isEmpty) {
+        Logger.e('NotificationService', 'User not authenticated');
+        throw Exception('User not authenticated');
+      }
+
+      // Check if the user was invited to this event
+      final invitationService = InvitationService(_pushNotificationService);
+      final wasInvited = await invitationService.isUserInvited(event.id, _currentUserId);
+
+      if (wasInvited) {
+        Logger.d('NotificationService', 'User was invited to this event, auto-accepting join request');
+
+        // Auto-accept the join request for invited users
+        await _firestore.collection('events').doc(event.id).update({
+          'joinedBy': FieldValue.arrayUnion([_currentUserId])
+        });
+
+        // Get the user's display name
+        final userDoc = await _firestore.collection('users').doc(_currentUserId).get();
+        final userData = userDoc.data() as Map<String, dynamic>?;
+        final displayName = userData?['displayName'] ?? 'Someone';
+
+        // Create a notification for the event creator
+        final notification = NotificationModel(
+          userId: event.userId, // Send to event creator
+          senderId: _currentUserId, // From current user
+          eventId: event.id,
+          type: NotificationType.joinAccepted,
+          status: NotificationStatus.pending,
+          message: 'you invited has joined your event',
+        );
+
+        // Add to Firestore
+        final docRef = await _notificationsCollection.add(notification.toMap());
+        Logger.d('NotificationService', 'Auto-join notification created with ID: ${docRef.id}');
+
+        // Send push notification to event creator
+        await _pushNotificationService.sendNotification(
+          userId: event.userId,
+          title: 'Event Joined',
+          body: '$displayName you invited has joined your event: ${event.inquiry}',
+          data: {
+            'type': 'invited_user_joined',
+            'eventId': event.id,
+            'notificationId': docRef.id,
+            'senderId': _currentUserId,
+          },
+        );
+
+        return docRef.id;
+      }
+
+      // Regular join request flow for non-invited users
+      Logger.d('NotificationService', 'User was not invited, creating regular join request');
+    } catch (e) {
+      Logger.e('NotificationService', 'Error in createJoinRequest pre-check', e);
+      // Continue with normal flow if there was an error checking invitation status
+    }
+
+    // Original implementation for non-invited users
+    try {
+      Logger.d('NotificationService', 'Creating regular join request for event: ${event.id}');
 
       // Ensure we have a user ID
       if (_currentUserId.isEmpty) {

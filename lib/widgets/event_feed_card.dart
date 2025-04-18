@@ -1,15 +1,21 @@
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/event_model.dart';
 import '../screens/chat/chat_room_screen.dart';
-import '../services/chat_service.dart';
 import '../services/event_user_service.dart';
 import '../services/event_service.dart';
 import '../services/notification_service.dart';
 import '../utils/date_formatter.dart';
 import '../utils/logger.dart';
+import 'user_profile_dialog.dart';
 
 class EventFeedCard extends ConsumerStatefulWidget {
   final EventModel event;
@@ -177,6 +183,53 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
       }
     }
   }
+  // Download QR code as image
+  Future<void> _downloadQrCode(BuildContext context, GlobalKey qrKey, String fileName) async {
+    try {
+      // Find the RenderRepaintBoundary
+      final RenderRepaintBoundary boundary = qrKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+
+      // Capture the image
+      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+
+      // Convert to bytes
+      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        throw Exception('Failed to convert image to bytes');
+      }
+
+      final Uint8List pngBytes = byteData.buffer.asUint8List();
+
+      // Get temporary directory
+      final Directory tempDir = await getTemporaryDirectory();
+      final String tempPath = tempDir.path;
+
+      // Create file
+      final File file = File('$tempPath/$fileName.png');
+      await file.writeAsBytes(pngBytes);
+
+      // Share the file
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'QR Code',
+      );
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('QR code shared successfully!'))
+        );
+      }
+    } catch (e) {
+      Logger.e('EventFeedCard', 'Error downloading QR code', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}'))
+        );
+      }
+    }
+  }
+
   // Build event type image based on activity type
   Widget _buildEventTypeImage(String activityType) {
     // Normalize the activity type to match the image naming convention
@@ -185,7 +238,7 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
 
     // Check if the activity type matches one of our image assets
     // The available types are: Celebrate, Drink, Eating, Play, Visit, Walk
-    final validTypes = ['Celebrate', 'Drink', 'Eating', 'Play', 'Visit', 'Walk'];
+    final validTypes = ['Celebrate', 'Run','Drink', 'Eating', 'Play', 'Visit', 'Walk'];
 
     // If the exact type isn't found, try to find a close match
     if (!validTypes.contains(normalizedType)) {
@@ -253,12 +306,23 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
     );
   }
 
+  // Show user profile dialog
+  void _showUserProfileDialog(BuildContext context, String userId) {
+    showDialog(
+      context: context,
+      builder: (context) => UserProfileDialog(userId: userId),
+    );
+  }
+
   // Show QR code dialog
   void _showQrCodeDialog(BuildContext context, String eventId) {
     Logger.d('EventFeedCard', 'Showing QR code for event: $eventId');
 
     // Create a unique data string for this event
     final String qrData = 'yetuga://event/$eventId';
+
+    // Create a GlobalKey to capture the QR code as an image
+    final GlobalKey qrKey = GlobalKey();
 
     showDialog(
       context: context,
@@ -279,22 +343,25 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
-              Container(
-                width: 200,
-                height: 200,
-                color: Colors.white,
-                child: QrImageView(
-                  data: qrData,
-                  version: QrVersions.auto,
-                  size: 200.0,
-                  backgroundColor: Colors.white,
-                  eyeStyle: const QrEyeStyle(
-                    eyeShape: QrEyeShape.square,
-                    color: Colors.black,
-                  ),
-                  dataModuleStyle: const QrDataModuleStyle(
-                    dataModuleShape: QrDataModuleShape.square,
-                    color: Colors.black,
+              RepaintBoundary(
+                key: qrKey,
+                child: Container(
+                  width: 200,
+                  height: 200,
+                  color: Colors.white,
+                  child: QrImageView(
+                    data: qrData,
+                    version: QrVersions.auto,
+                    size: 200.0,
+                    backgroundColor: Colors.white,
+                    eyeStyle: const QrEyeStyle(
+                      eyeShape: QrEyeShape.square,
+                      color: Colors.black,
+                    ),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: Colors.black,
+                    ),
                   ),
                 ),
               ),
@@ -304,9 +371,24 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                 style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
               const SizedBox(height: 16),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Close'),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Close'),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: () => _downloadQrCode(context, qrKey, 'event_${eventId}_qr'),
+                    icon: const Icon(Icons.download),
+                    label: const Text('Download'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -346,166 +428,171 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Card Header with gradient background
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF1A5F7A), Color(0xFF0A2942)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                // User Avatar with business/personal border
-                Builder(
-                  builder: (context) {
-                    // Get the theme's secondary color for personal account borders
-                    final secondaryColor = Theme.of(context).colorScheme.secondary;
+          // Card Header with gradient background based on account type
+          FutureBuilder<bool>(
+            future: ref.read(eventUserServiceProvider).isBusinessAccount(widget.event.userId),
+            builder: (context, snapshot) {
+              final isBusiness = snapshot.data ?? false;
+              Logger.d('EventFeedCard', 'isBusinessAccount for ${widget.event.userId} = $isBusiness');
 
-                    return FutureBuilder<bool>(
-                      future: ref.read(eventUserServiceProvider).isBusinessAccount(widget.event.userId),
-                      builder: (context, businessSnapshot) {
-                        final isBusiness = businessSnapshot.data ?? false;
+              // Define colors based on account type
+              final Color headerStartColor = isBusiness ? const Color(0xFFE6C34E) : const Color(0xFF1A5F7A);
+              final Color headerEndColor = const Color(0xFF0A2942);
+              final Color borderColor = isBusiness ? const Color(0xFFE6C34E) : Theme.of(context).colorScheme.secondary;
 
-                        return FutureBuilder<String?>(
-                          future: ref.read(eventUserServiceProvider).getUserProfileImageUrl(widget.event.userId),
-                          builder: (context, imageSnapshot) {
-                            if (imageSnapshot.connectionState == ConnectionState.waiting) {
-                              return const SizedBox(
-                                width: 40,
-                                height: 40,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              );
-                            }
+              return Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [headerStartColor, headerEndColor],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    // User Avatar with business/personal border
+                    FutureBuilder<String?>(
+                      future: ref.read(eventUserServiceProvider).getUserProfileImageUrl(widget.event.userId),
+                      builder: (context, imageSnapshot) {
+                        if (imageSnapshot.connectionState == ConnectionState.waiting) {
+                          return const SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          );
+                        }
 
-                            final imageUrl = imageSnapshot.data;
+                        final imageUrl = imageSnapshot.data;
 
-                            if (imageUrl == null || imageUrl.isEmpty) {
-                              return Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: Colors.amber,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: isBusiness ? Colors.amber : secondaryColor,
-                                    width: 2,
-                                  ),
-                                ),
-                                child: const Center(
-                                  child: Icon(
-                                    Icons.person,
-                                    color: Colors.white,
-                                    size: 24,
-                                  ),
-                                ),
-                              );
-                            }
+                        // Create a tappable profile image
+                        Widget profileImage;
 
-                            return Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: isBusiness ? Colors.amber : secondaryColor,
-                                  width: 2,
-                                ),
+                        if (imageUrl == null || imageUrl.isEmpty) {
+                          profileImage = Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: isBusiness ? const Color(0xFFE6C34E) : Colors.amber,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: borderColor,
+                                width: 2,
                               ),
-                              child: ClipOval(
-                                child: CachedNetworkImage(
-                                  imageUrl: imageUrl,
-                                  placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
-                                  errorWidget: (context, url, error) => const Icon(Icons.error),
-                                  fit: BoxFit.cover,
-                                ),
+                            ),
+                            child: const Center(
+                              child: Icon(
+                                Icons.person,
+                                color: Colors.white,
+                                size: 24,
                               ),
-                            );
-                          },
+                            ),
+                          );
+                        } else {
+                          profileImage = Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: borderColor,
+                                width: 2,
+                              ),
+                            ),
+                            child: ClipOval(
+                              child: CachedNetworkImage(
+                                imageUrl: imageUrl,
+                                placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
+                                errorWidget: (context, url, error) => const Icon(Icons.error),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          );
+                        }
+
+                        // Wrap the profile image in a GestureDetector to show profile dialog on tap
+                        return GestureDetector(
+                          onTap: () => _showUserProfileDialog(context, widget.event.userId),
+                          child: profileImage,
                         );
                       },
-                    );
-                  },
-                ),
-                const SizedBox(width: 12),
+                    ),
+                    const SizedBox(width: 12),
 
-                // User Name and Event Type
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // User display name
-                      FutureBuilder<String>(
-                        future: ref.read(eventUserServiceProvider).getUserDisplayName(widget.event.userId),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return const SizedBox(
-                              width: 100,
-                              height: 14,
-                              child: LinearProgressIndicator(minHeight: 2),
-                            );
-                          }
+                    // User Name and Event Type
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // User display name
+                          FutureBuilder<String>(
+                            future: ref.read(eventUserServiceProvider).getUserDisplayName(widget.event.userId),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                return const SizedBox(
+                                  width: 100,
+                                  height: 14,
+                                  child: LinearProgressIndicator(minHeight: 2),
+                                );
+                              }
 
-                          final displayName = snapshot.data ?? 'User';
-                          Logger.d('EventFeedCard', 'Display name for user ${widget.event.userId}: $displayName');
+                              final displayName = snapshot.data ?? 'User';
 
-                          return Text(
-                            displayName.toUpperCase(),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: Colors.white,
-                            ),
-                          );
-                        },
+                              return Text(
+                                displayName.toUpperCase(),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: Colors.white,
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 2),
+                          // Username
+                          FutureBuilder<String>(
+                            future: ref.read(eventUserServiceProvider).getUserUsername(widget.event.userId),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                return const SizedBox(
+                                  width: 80,
+                                  height: 12,
+                                  child: LinearProgressIndicator(minHeight: 2),
+                                );
+                              }
+
+                              final username = snapshot.data ?? 'username';
+
+                              return Text(
+                                '@$username',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 2),
-                      // Username
-                      FutureBuilder<String>(
-                        future: ref.read(eventUserServiceProvider).getUserUsername(widget.event.userId),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return const SizedBox(
-                              width: 80,
-                              height: 12,
-                              child: LinearProgressIndicator(minHeight: 2),
-                            );
-                          }
+                    ),
 
-                          final username = snapshot.data ?? 'username';
-                          Logger.d('EventFeedCard', 'Username for user ${widget.event.userId}: $username');
-
-                          return Text(
-                            '@$username',
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                            ),
-                          );
-                        },
+                    // QR Code button
+                    IconButton(
+                      icon: const Icon(
+                        Icons.qr_code,
+                        color: Colors.white,
+                        size: 24,
                       ),
-
-                    ],
-                  ),
+                      onPressed: () {
+                        _showQrCodeDialog(context, widget.event.id);
+                      },
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
                 ),
-
-                // QR Code button
-                IconButton(
-                  icon: const Icon(
-                    Icons.qr_code,
-                    color: Colors.white,
-                    size: 24,
-                  ),
-                  onPressed: () {
-                    _showQrCodeDialog(context, widget.event.id);
-                  },
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
-            ),
+              );
+            },
           ),
 
           // Card Image with Like Button overlay
@@ -568,8 +655,8 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                     const SizedBox(height: 2),
                       Text(
                         widget.event.activityType,
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: theme.textTheme.bodySmall?.color,
                           fontSize: 12,
                         ),
                       ),

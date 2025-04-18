@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/event_model.dart';
 import '../services/event_service.dart';
+import '../services/follow_service.dart';
+import '../services/invitation_service.dart';
 import '../utils/logger.dart';
+import 'invite_followers_dialog.dart';
 
 class CreateEventSheet extends ConsumerStatefulWidget {
   const CreateEventSheet({super.key});
@@ -27,13 +31,16 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
   TimeOfDay _selectedTime = TimeOfDay.now();
 
   // Privacy toggle
-  bool _isPrivate = true;
+  bool _isPrivate = false;
 
   // Loading state
   bool _isLoading = false;
 
   // Error message
   String? _errorMessage;
+
+  // Selected invitees for private events
+  List<String>? _selectedInvitees;
 
   @override
   void initState() {
@@ -490,6 +497,10 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
                       onChanged: (value) {
                         setState(() {
                           _isPrivate = value;
+                          // Clear attendee limit when switching to private
+                          if (value) {
+                            _attendeeLimitController.clear();
+                          }
                         });
                       },
                       activeColor: primaryColor,
@@ -502,44 +513,45 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
                     ),
                   ],
                 ),
-                
-                // Attendee limit field
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 24.0),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Limit:',
-                          style: TextStyle(color: textColor, fontSize: 16),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: _attendeeLimitController,
-                            keyboardType: TextInputType.number,
-                            style: TextStyle(color: textColor),
-                            decoration: InputDecoration(
-                              hintText: "No limit",
-                              hintStyle: TextStyle(color: hintColor),
-                              enabledBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(color: borderColor),
+
+                // Attendee limit field - only show for public events
+                if (!_isPrivate)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 24.0),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Limit:',
+                            style: TextStyle(color: textColor, fontSize: 16),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: _attendeeLimitController,
+                              keyboardType: TextInputType.number,
+                              style: TextStyle(color: textColor),
+                              decoration: InputDecoration(
+                                hintText: "No limit",
+                                hintStyle: TextStyle(color: hintColor),
+                                enabledBorder: UnderlineInputBorder(
+                                  borderSide: BorderSide(color: borderColor),
+                                ),
+                                focusedBorder: UnderlineInputBorder(
+                                  borderSide: BorderSide(color: primaryColor),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                               ),
-                              focusedBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(color: primaryColor),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                             ),
                           ),
-                        ),
-                        Text(
-                          'People',
-                          style: TextStyle(color: textColor, fontSize: 16),
-                        ),
-                      ],
+                          Text(
+                            'People',
+                            style: TextStyle(color: textColor, fontSize: 16),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
 
@@ -574,6 +586,65 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
                     return;
                   }
 
+                  // If it's a private event, check if the user has followers first
+                  if (_isPrivate) {
+                    final followService = ref.read(followServiceProvider);
+                    final auth = FirebaseAuth.instance;
+                    final currentUserId = auth.currentUser?.uid;
+
+                    if (currentUserId != null && currentUserId.isNotEmpty) {
+                      setState(() {
+                        _isLoading = true;
+                        _errorMessage = null;
+                      });
+
+                      try {
+                        // Get the user's followers
+                        final followingStream = followService.getFollowing(currentUserId);
+                        final following = await followingStream.first;
+
+                        // Filter out business accounts - only show personal accounts
+                        final personalAccounts = following.where((user) {
+                          return user['accountType'] == 'personal';
+                        }).toList();
+
+                        // If no personal accounts to invite, show alert and don't create event
+                        if (personalAccounts.isEmpty) {
+                          setState(() {
+                            _isLoading = false;
+                          });
+
+                          _showNoFollowersAlert();
+                          return;
+                        }
+
+                        // If we have followers, show the invite dialog before creating the event
+                        setState(() {
+                          _isLoading = false;
+                        });
+
+                        // Show the invite dialog and wait for the result
+                        final selectedInvitees = await _showPreCreationInviteDialog();
+
+                        // If the user cancelled the dialog, don't create the event
+                        if (selectedInvitees == null) {
+                          return;
+                        }
+
+                        // Continue with event creation with the selected invitees
+                        setState(() {
+                          _isLoading = true;
+                        });
+
+                        // Store the selected invitees for later use
+                        _selectedInvitees = selectedInvitees;
+                      } catch (e) {
+                        Logger.e('CreateEventSheet', 'Error checking followers', e);
+                        // Continue with event creation even if there's an error checking followers
+                      }
+                    }
+                  }
+
                   setState(() {
                     _isLoading = true;
                     _errorMessage = null;
@@ -582,9 +653,9 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
                   try {
                     Logger.d('CreateEventSheet', 'Creating new event...');
 
-                    // Parse attendee limit if provided
+                    // Parse attendee limit if provided and event is not private
                     int? attendeeLimit;
-                    if (_attendeeLimitController.text.isNotEmpty) {
+                    if (!_isPrivate && _attendeeLimitController.text.isNotEmpty) {
                       try {
                         attendeeLimit = int.parse(_attendeeLimitController.text.trim());
                         if (attendeeLimit <= 0) {
@@ -597,6 +668,10 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
                         });
                         return;
                       }
+                    }
+                    // Private events don't have attendee limits
+                    if (_isPrivate) {
+                      attendeeLimit = null;
                     }
 
                     // Create event model
@@ -611,19 +686,36 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
                     );
 
                     Logger.d('CreateEventSheet', 'Event model created: ${event.toMap()}');
+                    Logger.d('CreateEventSheet', 'isPrivate value: ${_isPrivate}');
 
                     // Get the event service
                     final eventService = ref.read(eventServiceProvider);
 
                     // Add the event to Firestore
                     Logger.d('CreateEventSheet', 'Adding event to Firestore...');
-                    await eventService.addEvent(event);
-                    Logger.d('CreateEventSheet', 'Event added successfully');
+                    final eventId = await eventService.addEvent(event);
+                    Logger.d('CreateEventSheet', 'Event added successfully with ID: $eventId');
+
+                    // For private events, we've already shown the invite dialog and collected invitees
+                    // So we just need to send the invitations now
+                    if (_isPrivate && _selectedInvitees != null && _selectedInvitees!.isNotEmpty) {
+                      Logger.d('CreateEventSheet', 'Sending invitations to ${_selectedInvitees!.length} users for new event');
+
+                      final invitationService = ref.read(invitationServiceProvider);
+
+                      // Send invitations to all selected users
+                      for (final userId in _selectedInvitees!) {
+                        await invitationService.sendInvitation(eventId, userId);
+                      }
+
+                      Logger.d('CreateEventSheet', 'Invitations sent successfully');
+                    }
 
                     // Close the sheet if still mounted
                     if (mounted) {
-                      // Use a new function to avoid BuildContext across async gaps
-                      _closeSheet();
+                      // For private events, we've already handled invitations, so just close the sheet
+                      // Use a separate method to avoid BuildContext across async gaps issues
+                      _closeSheetSafely();
                     }
                   } catch (e) {
                     Logger.e('CreateEventSheet', 'Error creating event', e);
@@ -668,9 +760,82 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
     );
   }
 
-  // Helper method to close the sheet safely
-  void _closeSheet() {
-    Navigator.pop(context);
+  // Show alert when user is not following anyone
+  void _showNoFollowersAlert() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('No Followers'),
+        content: const Text('You are not following any personal accounts. Private events require at least one personal account to invite.'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // Close the alert
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Helper method to safely close the sheet without BuildContext issues
+  void _closeSheetSafely() {
+    Logger.d('CreateEventSheet', 'Safely closing sheet');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    });
+  }
+
+  // Helper method to show the invite dialog for an existing event
+  void _showInviteDialog(BuildContext context, String eventId) {
+    Logger.d('CreateEventSheet', 'Inside _showInviteDialog for eventId: $eventId');
+
+    // Show the dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Prevent dismissing by tapping outside
+      builder: (dialogContext) => InviteFollowersDialog(eventId: eventId),
+    ).then((value) {
+      Logger.d('CreateEventSheet', 'Invite dialog closed with result: $value');
+    });
+  }
+
+  // Helper method to show the invite dialog before creating an event
+  Future<List<String>?> _showPreCreationInviteDialog() async {
+    Logger.d('CreateEventSheet', 'Showing pre-creation invite dialog');
+
+    // Show the dialog and wait for the result
+    final result = await showDialog<dynamic>(
+      context: context,
+      barrierDismissible: false, // Prevent dismissing by tapping outside
+      builder: (dialogContext) => InviteFollowersDialog(
+        onInviteSelected: (selectedUserIds) {
+          Logger.d('CreateEventSheet', 'Selected ${selectedUserIds.length} invitees');
+        },
+      ),
+    );
+
+    Logger.d('CreateEventSheet', 'Pre-creation invite dialog closed with result: $result');
+
+    // If the dialog was cancelled or returned false, return null
+    if (result == null || result == false) {
+      return null;
+    }
+
+    // Get the selected invitees from the dialog
+    if (result is List<String>) {
+      return result;
+    } else if (result == true) {
+      // Dialog was completed but we don't have the invitees list
+      // This shouldn't happen with the new implementation, but handle it just in case
+      return [];
+    }
+
+    return null;
   }
 
   // Helper method to build a scrollable wheel for time/date selection

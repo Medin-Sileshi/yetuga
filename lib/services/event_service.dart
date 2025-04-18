@@ -1,7 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:async/async.dart';
 import '../models/event_model.dart';
+import '../services/invitation_service.dart';
+import '../services/push_notification_service.dart';
 import '../utils/logger.dart';
 
 // Provider for the EventService
@@ -97,9 +100,15 @@ class EventService {
   }
 
   // Get public events (not private) with pagination
+  // Also includes private events that the current user is invited to
   Stream<List<EventModel>> getPublicEvents({int limit = 10, DocumentSnapshot? startAfter}) {
+    if (_currentUserId.isEmpty) {
+      return Stream.value([]);
+    }
+
+    // First, get public events
     Query query = _eventsCollection
-        .where('isPrivate', isEqualTo: false) // Use a proper query instead of filtering in memory
+        .where('isPrivate', isEqualTo: false)
         .orderBy('createdAt', descending: true);
 
     // Apply pagination if startAfter is provided
@@ -110,11 +119,65 @@ class EventService {
     // Apply limit
     query = query.limit(limit);
 
-    return query.snapshots().map((snapshot) {
+    // Get public events stream
+    final publicEventsStream = query.snapshots().map((snapshot) {
       return snapshot.docs
           .map((doc) => EventModel.fromFirestore(doc))
           .toList();
     });
+
+    // Get private events that the user is invited to or has joined
+    Query privateQuery = _eventsCollection
+        .where('isPrivate', isEqualTo: true)
+        .orderBy('createdAt', descending: true);
+
+    // Apply limit (we'll filter later)
+    privateQuery = privateQuery.limit(limit * 2);
+
+    // Get private events stream
+    final privateEventsStream = privateQuery.snapshots().map((snapshot) async {
+      final events = snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList();
+      final filteredEvents = <EventModel>[];
+
+      // Check each private event
+      for (final event in events) {
+        // Include if user is the creator
+        if (event.userId == _currentUserId) {
+          filteredEvents.add(event);
+          continue;
+        }
+
+        // Include if user has joined
+        if (event.joinedBy.contains(_currentUserId)) {
+          filteredEvents.add(event);
+          continue;
+        }
+
+        // Include if user is invited
+        try {
+          // Get push notification service for InvitationService
+          final pushNotificationService = PushNotificationService();
+          final invitationService = InvitationService(pushNotificationService);
+          final isInvited = await invitationService.isUserInvited(event.id, _currentUserId);
+          if (isInvited) {
+            filteredEvents.add(event);
+          }
+        } catch (e) {
+          Logger.e('EventService', 'Error checking invitation status', e);
+        }
+      }
+
+      return filteredEvents;
+    }).asyncMap((future) async => await future);
+
+    // Combine both streams
+    return StreamGroup.merge([publicEventsStream, privateEventsStream])
+        .map((events) {
+          // Sort by createdAt
+          events.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          // Limit to requested number
+          return events.take(limit).toList();
+        });
   }
 
   // Delete an event

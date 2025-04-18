@@ -28,7 +28,11 @@ class ChatService {
   }
 
   // Send a message to the chat
-  Future<void> sendMessage(String eventId, String message) async {
+  Future<void> sendMessage(String eventId, String message, {
+    String? replyToId,
+    String? replyToSenderName,
+    String? replyToMessage,
+  }) async {
     try {
       if (_currentUserId.isEmpty) {
         throw Exception('User not authenticated');
@@ -61,12 +65,81 @@ class ChatService {
         senderId: _currentUserId,
         senderName: displayName,
         message: message,
+        replyToId: replyToId,
+        replyToSenderName: replyToSenderName,
+        replyToMessage: replyToMessage,
       );
 
       await _getChatCollection(eventId).add(chatMessage.toMap());
       Logger.d('ChatService', 'Message sent to event $eventId');
     } catch (e) {
       Logger.e('ChatService', 'Error sending message', e);
+      rethrow;
+    }
+  }
+
+  // Edit an existing message
+  Future<void> editMessage(String eventId, String messageId, String newMessage) async {
+    try {
+      if (_currentUserId.isEmpty) {
+        throw Exception('User not authenticated');
+      }
+
+      // Get the message to verify ownership
+      final messageDoc = await _getChatCollection(eventId).doc(messageId).get();
+      if (!messageDoc.exists) {
+        throw Exception('Message not found');
+      }
+
+      final messageData = messageDoc.data() as Map<String, dynamic>;
+      final String senderId = messageData['senderId'] as String;
+
+      // Verify that the current user is the sender of the message
+      if (senderId != _currentUserId) {
+        throw Exception('You can only edit your own messages');
+      }
+
+      // Update the message
+      await _getChatCollection(eventId).doc(messageId).update({
+        'message': newMessage,
+        'isEdited': true,
+        'editedAt': Timestamp.now(),
+      });
+
+      Logger.d('ChatService', 'Message $messageId edited in event $eventId');
+    } catch (e) {
+      Logger.e('ChatService', 'Error editing message', e);
+      rethrow;
+    }
+  }
+
+  // Delete a message
+  Future<void> deleteMessage(String eventId, String messageId) async {
+    try {
+      if (_currentUserId.isEmpty) {
+        throw Exception('User not authenticated');
+      }
+
+      // Get the message to verify ownership
+      final messageDoc = await _getChatCollection(eventId).doc(messageId).get();
+      if (!messageDoc.exists) {
+        throw Exception('Message not found');
+      }
+
+      final messageData = messageDoc.data() as Map<String, dynamic>;
+      final String senderId = messageData['senderId'] as String;
+
+      // Verify that the current user is the sender of the message
+      if (senderId != _currentUserId) {
+        throw Exception('You can only delete your own messages');
+      }
+
+      // Delete the message
+      await _getChatCollection(eventId).doc(messageId).delete();
+
+      Logger.d('ChatService', 'Message $messageId deleted from event $eventId');
+    } catch (e) {
+      Logger.e('ChatService', 'Error deleting message', e);
       rethrow;
     }
   }
