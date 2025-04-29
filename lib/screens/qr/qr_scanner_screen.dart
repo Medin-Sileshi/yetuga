@@ -22,8 +22,25 @@ class QrScannerScreen extends ConsumerStatefulWidget {
 }
 
 class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
-  final MobileScannerController _scannerController = MobileScannerController();
+  final MobileScannerController _scannerController = MobileScannerController(
+    // Ensure all formats are enabled
+    formats: BarcodeFormat.values,
+    // Use higher resolution for better scanning
+    detectionSpeed: DetectionSpeed.normal,
+    // Enable auto focus for better scanning
+    facing: CameraFacing.back,
+  );
   bool _isGeneratingQr = false;
+  // Debug mode to show raw QR code data
+  bool _debugMode = false;
+  // Store the last scanned code for debugging
+  String? _lastScannedCode;
+
+  @override
+  void initState() {
+    super.initState();
+    Logger.d('QrScannerScreen', 'Initializing QR scanner');
+  }
 
   @override
   void dispose() {
@@ -34,12 +51,51 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
   void _handleDetection(BarcodeCapture capture) {
     final List<Barcode> barcodes = capture.barcodes;
 
+    // Log the number of barcodes detected
+    Logger.d('QrScannerScreen', 'Detected ${barcodes.length} barcodes');
+
+    // Log all barcode formats detected
+    for (final barcode in barcodes) {
+      Logger.d('QrScannerScreen', 'Barcode format: ${barcode.format}, type: ${barcode.type}, value: ${barcode.rawValue}');
+    }
+
     for (final barcode in barcodes) {
       final String? code = barcode.rawValue;
-      if (code != null && code.startsWith('yetuga://profile/')) {
+
+      // Store the last scanned code for debugging
+      setState(() {
+        _lastScannedCode = code;
+      });
+
+      // Log the raw code value
+      Logger.d('QrScannerScreen', 'Raw QR code value: $code');
+
+      if (code == null) {
+        Logger.e('QrScannerScreen', 'Null QR code value detected');
+        continue;
+      }
+
+      // Try to handle both URL and non-URL formats
+      String normalizedCode = code;
+
+      // Handle profile QR codes
+      if (normalizedCode.contains('profile/')) {
         try {
           // Extract the user ID from the QR code
-          final String userId = code.replaceFirst('yetuga://profile/', '');
+          String userId;
+          if (normalizedCode.startsWith('yetuga://profile/')) {
+            userId = normalizedCode.replaceFirst('yetuga://profile/', '');
+          } else {
+            // Try to extract user ID from any format containing 'profile/'
+            final profileIndex = normalizedCode.indexOf('profile/');
+            if (profileIndex >= 0) {
+              userId = normalizedCode.substring(profileIndex + 8); // 'profile/'.length = 8
+            } else {
+              _showErrorSnackBar('Invalid profile QR code format');
+              return;
+            }
+          }
+
           Logger.d('QrScannerScreen', 'Detected profile QR code for user: $userId');
 
           if (userId.isEmpty) {
@@ -63,10 +119,60 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
           });
           return;
         } catch (e) {
-          Logger.e('QrScannerScreen', 'Error handling QR code', e);
+          Logger.e('QrScannerScreen', 'Error handling profile QR code', e);
           _showErrorSnackBar('Error processing QR code: $e');
           return;
         }
+      }
+
+      // Handle event QR codes
+      else if (normalizedCode.contains('event/')) {
+        try {
+          // Extract the event ID from the QR code
+          String eventId;
+          if (normalizedCode.startsWith('yetuga://event/')) {
+            eventId = normalizedCode.replaceFirst('yetuga://event/', '');
+          } else {
+            // Try to extract event ID from any format containing 'event/'
+            final eventIndex = normalizedCode.indexOf('event/');
+            if (eventIndex >= 0) {
+              eventId = normalizedCode.substring(eventIndex + 6); // 'event/'.length = 6
+            } else {
+              _showErrorSnackBar('Invalid event QR code format');
+              return;
+            }
+          }
+
+          Logger.d('QrScannerScreen', 'Detected event QR code for event: $eventId');
+
+          if (eventId.isEmpty) {
+            _showErrorSnackBar('Invalid QR code: Event ID is empty');
+            return;
+          }
+
+          // Pause scanning while showing the dialog
+          _scannerController.stop();
+
+          // Show a success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Event QR code detected: $eventId'),
+              duration: const Duration(seconds: 1),
+            ),
+          );
+
+          // Pass the event ID back to the home screen
+          Navigator.of(context).pop({'eventId': eventId});
+
+          return;
+        } catch (e) {
+          Logger.e('QrScannerScreen', 'Error handling event QR code', e);
+          _showErrorSnackBar('Error processing QR code: $e');
+          return;
+        }
+      } else {
+        // Log unrecognized QR code format
+        Logger.d('QrScannerScreen', 'Unrecognized QR code format: $normalizedCode');
       }
     }
   }
@@ -150,6 +256,68 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
           borderLength: 30.0,
           borderWidth: 3.0,
           cutOutSize: 250.0,
+        ),
+
+        // Debug info overlay
+        if (_debugMode && _lastScannedCode != null)
+          Positioned(
+            top: 16,
+            left: 16,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.black.withAlpha(200),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Last scanned code:',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _lastScannedCode!,
+                    style: const TextStyle(color: Colors.white),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        // Debug mode toggle
+        Positioned(
+          top: 16,
+          right: 16,
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                _debugMode = !_debugMode;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Debug mode ${_debugMode ? 'enabled' : 'disabled'}'),
+                  duration: const Duration(seconds: 1),
+                ),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: _debugMode ? Colors.green.withAlpha(200) : Colors.black.withAlpha(128),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.bug_report,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -237,9 +405,16 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
 
   // Download QR code as image
   Future<void> _downloadQrCode(BuildContext context, GlobalKey qrKey, String fileName) async {
+    // Store the scaffold messenger before any async operations
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     try {
       // Find the RenderRepaintBoundary
-      final RenderRepaintBoundary boundary = qrKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      final RenderRepaintBoundary? boundary = qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+
+      if (boundary == null) {
+        throw Exception('QR code render object not found');
+      }
 
       // Capture the image
       final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
@@ -268,14 +443,14 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
 
       // Show success message
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           const SnackBar(content: Text('QR code shared successfully!'))
         );
       }
     } catch (e) {
       Logger.e('QrScannerScreen', 'Error downloading QR code', e);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           SnackBar(content: Text('Error: ${e.toString()}'))
         );
       }
@@ -390,7 +565,7 @@ class QRScannerOverlay extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Text(
-                'Scan a profile QR code',
+                'Scan a profile or event QR code',
                 style: TextStyle(color: Colors.white),
               ),
             ),

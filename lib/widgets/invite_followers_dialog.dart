@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/follow_service.dart';
-import '../services/invitation_service.dart';
+import '../providers/service_providers.dart';
 import '../utils/logger.dart';
 
 class InviteFollowersDialog extends ConsumerStatefulWidget {
@@ -108,8 +108,10 @@ class _InviteFollowersDialogState extends ConsumerState<InviteFollowersDialog> {
     setState(() {
       if (_selectedUserIds.contains(userId)) {
         _selectedUserIds.remove(userId);
+        Logger.d('InviteFollowersDialog', 'Removed user $userId from selection, now have ${_selectedUserIds.length} selected');
       } else {
         _selectedUserIds.add(userId);
+        Logger.d('InviteFollowersDialog', 'Added user $userId to selection, now have ${_selectedUserIds.length} selected');
       }
     });
   }
@@ -123,21 +125,25 @@ class _InviteFollowersDialogState extends ConsumerState<InviteFollowersDialog> {
         _errorMessage = null;
       });
 
+      // Make a copy of the selected user IDs to ensure it's not modified
+      final selectedIds = List<String>.from(_selectedUserIds);
+      Logger.d('InviteFollowersDialog', 'Processing invitation for ${selectedIds.length} users: $selectedIds');
+
       // If we have an event ID, send invitations directly
       if (widget.eventId != null && widget.eventId!.isNotEmpty) {
-        final invitationService = ref.read(invitationServiceProvider);
+        final rsvpService = ref.read(rsvpServiceProvider);
 
         // Send invitations to all selected users
-        for (final userId in _selectedUserIds) {
-          await invitationService.sendInvitation(widget.eventId!, userId);
+        for (final userId in selectedIds) {
+          await rsvpService.sendInvitation(widget.eventId!, userId);
         }
 
-        Logger.d('InviteFollowersDialog', 'Sent invitations for existing event ${widget.eventId}');
+        Logger.d('InviteFollowersDialog', 'Sent RSVPs for existing event ${widget.eventId}');
       } else {
         // If we're creating a new event, call the callback with selected user IDs
         if (widget.onInviteSelected != null) {
-          Logger.d('InviteFollowersDialog', 'Calling onInviteSelected with ${_selectedUserIds.length} users');
-          widget.onInviteSelected!(_selectedUserIds);
+          Logger.d('InviteFollowersDialog', 'Calling onInviteSelected with ${selectedIds.length} users: $selectedIds');
+          widget.onInviteSelected!(selectedIds);
         } else {
           Logger.e('InviteFollowersDialog', 'No callback provided for pre-creation invites');
         }
@@ -145,7 +151,11 @@ class _InviteFollowersDialogState extends ConsumerState<InviteFollowersDialog> {
 
       // Close the dialog
       if (mounted) {
-        Navigator.of(context).pop(true);
+        Logger.d('InviteFollowersDialog', 'Closing dialog with result: selectedUserIds: $selectedIds');
+        // Make sure we're returning a List<String>
+        final result = selectedIds.map((id) => id.toString()).toList();
+        Logger.d('InviteFollowersDialog', 'Returning result of type: ${result.runtimeType}, value: $result');
+        Navigator.of(context).pop(result);
       }
     } catch (e) {
       Logger.e('InviteFollowersDialog', 'Error handling invitations', e);

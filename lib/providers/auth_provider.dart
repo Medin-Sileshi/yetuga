@@ -10,8 +10,23 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   AuthNotifier() : super(const AsyncValue.loading()) {
     _auth.authStateChanges().listen((user) {
       Logger.d('AuthProvider',
-          "Auth state changed: ${user != null ? 'User logged in' : 'No user'}");
-      state = AsyncValue.data(user);
+          "Auth state changed: ${user != null ? 'User logged in: ${user.uid}' : 'No user'}");
+
+      if (user != null) {
+        // Force a reload of the user to ensure we have the latest data
+        user.reload().then((_) {
+          // Get the refreshed user
+          final refreshedUser = _auth.currentUser;
+          Logger.d('AuthProvider', 'User reloaded: ${refreshedUser?.uid}');
+          state = AsyncValue.data(refreshedUser);
+        }).catchError((error) {
+          Logger.e('AuthProvider', 'Error reloading user', error);
+          // Still update the state with the original user
+          state = AsyncValue.data(user);
+        });
+      } else {
+        state = const AsyncValue.data(null);
+      }
     });
   }
 
@@ -76,10 +91,35 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
 
   Future<void> signOut(WidgetRef ref) async {
     try {
+      // Get the current user ID before signing out
+      final currentUserId = _auth.currentUser?.uid;
+      Logger.d('AuthProvider', 'Starting sign out process for user: $currentUserId');
+
+      // Set state to loading
       state = const AsyncValue.loading();
-      Logger.d('AuthProvider', 'Starting sign out process');
+
+      // Clear all caches before signing out
+      if (currentUserId != null) {
+        try {
+          // We'll handle this in the auth_service.dart file
+          Logger.d('AuthProvider', 'Skipping onboarding provider state clearing in AuthProvider');
+        } catch (e) {
+          Logger.e('AuthProvider', 'Error in auth provider', e);
+        }
+      }
+
+      // Sign out using auth service
       final authService = ref.read(authServiceProvider);
       await authService.signOut();
+
+      // Force a reload of Firebase Auth
+      try {
+        await FirebaseAuth.instance.signOut();
+        Logger.d('AuthProvider', 'Forced Firebase Auth reload');
+      } catch (e) {
+        Logger.e('AuthProvider', 'Error forcing Firebase Auth reload', e);
+      }
+
       Logger.d('AuthProvider', 'Sign out successful');
       state = const AsyncValue.data(null);
     } catch (e, st) {

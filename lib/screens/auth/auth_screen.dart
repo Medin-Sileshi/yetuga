@@ -9,7 +9,7 @@ import '../../providers/firebase_provider.dart';
 import '../../models/onboarding_data.dart';
 import '../../widgets/auth_page_template.dart';
 import 'email_signin_screen.dart';
-import '../home_screen.dart';
+import '../authenticated_home_screen.dart';
 
 class AuthScreen extends ConsumerWidget {
   const AuthScreen({super.key});
@@ -61,7 +61,45 @@ class AuthScreen extends ConsumerWidget {
         }
 
         try {
-          // Check Firebase directly for onboarding status
+          // First check Hive for cached onboarding data
+          final onboardingState = ref.read(onboardingProvider);
+
+          // Check if we have valid data in Hive
+          bool onboardingCompletedInHive = false;
+
+          await onboardingState.when(
+            data: (data) async {
+              if (data.isComplete()) {
+                onboardingCompletedInHive = true;
+                Logger.d('AuthScreen', 'Onboarding is completed in Hive: ${data.toString()}');
+              } else {
+                Logger.d('AuthScreen', 'Onboarding is not completed in Hive');
+              }
+            },
+            loading: () {
+              Logger.d('AuthScreen', 'Onboarding data is loading from Hive');
+            },
+            error: (error, stack) {
+              Logger.d('AuthScreen', 'Error loading onboarding data from Hive: $error');
+            },
+          );
+
+          // If onboarding is completed in Hive, navigate to home screen
+          if (onboardingCompletedInHive) {
+            // Close the loading dialog
+            if (context.mounted) {
+              Navigator.of(context).pop();
+
+              // Navigate to home screen
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const AuthenticatedHomeScreen()),
+                (route) => false,
+              );
+              return; // Exit early
+            }
+          }
+
+          // If not found in Hive, check Firebase
           final firebaseService = ref.read(firebaseServiceProvider);
           final userProfile = await firebaseService.getUserProfile();
           Logger.d('AuthScreen', 'User profile from Firebase: $userProfile');
@@ -100,7 +138,7 @@ class AuthScreen extends ConsumerWidget {
 
             if (context.mounted) {
               Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const HomeScreen()),
+                MaterialPageRoute(builder: (context) => const AuthenticatedHomeScreen()),
                 (route) => false,
               );
             }
@@ -120,35 +158,41 @@ class AuthScreen extends ConsumerWidget {
             Navigator.of(context).pop();
           }
 
-          // Fall back to checking the onboarding provider
+          // Fall back to checking the onboarding provider again
+          // This is a safety check in case the first check missed something
           final onboardingState = ref.read(onboardingProvider);
-          onboardingState.when(
-            data: (data) {
+
+          // Check if we have valid data in Hive one more time
+          bool onboardingCompletedInHive = false;
+
+          await onboardingState.when(
+            data: (data) async {
               if (data.isComplete()) {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (context) => const HomeScreen()),
-                  (route) => false,
-                );
-              } else {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (context) => const OnboardingScreen()),
-                  (route) => false,
-                );
+                onboardingCompletedInHive = true;
+                Logger.d('AuthScreen', 'Onboarding is completed in Hive (fallback check): ${data.toString()}');
               }
             },
             loading: () {
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const OnboardingScreen()),
-                (route) => false,
-              );
+              Logger.d('AuthScreen', 'Onboarding data is still loading from Hive');
             },
             error: (error, stack) {
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const OnboardingScreen()),
-                (route) => false,
-              );
+              Logger.d('AuthScreen', 'Error loading onboarding data from Hive: $error');
             },
           );
+
+          if (onboardingCompletedInHive && context.mounted) {
+            // If onboarding is completed in Hive, navigate to home screen
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const AuthenticatedHomeScreen()),
+              (route) => false,
+            );
+          } else if (context.mounted) {
+            // If not completed or error, navigate to onboarding screen
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const OnboardingScreen()),
+              (route) => false,
+            );
+          }
         }
       }
     } catch (e) {

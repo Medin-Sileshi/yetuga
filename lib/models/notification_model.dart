@@ -6,6 +6,9 @@ enum NotificationType {
   joinRejected,
   eventCancelled,
   eventUpdated,
+  eventInvitation,
+  invitationAccepted,
+  invitationRejected,
 }
 
 enum NotificationStatus {

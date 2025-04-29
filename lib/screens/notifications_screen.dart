@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/notification_model.dart';
 import '../services/notification_service.dart';
 import '../services/event_user_service.dart';
+import '../services/rsvp_service.dart';
 import '../utils/logger.dart';
 import '../widgets/event_info_widget.dart';
+import '../widgets/notification_badge.dart';
 
 class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({Key? key}) : super(key: key);
@@ -81,47 +83,83 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         title: const Text('Notifications'),
         backgroundColor: const Color(0xFF0A2942),
         foregroundColor: Colors.white,
-      ),
-      body: StreamBuilder<List<NotificationModel>>(
-        stream: notificationService.getNotifications(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              // Force a refresh of notifications
+              final notificationService = ref.read(notificationServiceProvider);
+              notificationService.checkAndSendUnreadNotifications();
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Error: ${snapshot.error}'),
-            );
-          }
-
-          final notifications = snapshot.data ?? [];
-
-          if (notifications.isEmpty) {
-            return const Center(
-              child: Text('No notifications yet'),
-            );
-          }
-
-          return ListView.builder(
-            itemCount: notifications.length,
-            itemBuilder: (context, index) {
-              final notification = notifications[index];
-              // Check if this notification has been marked as read locally
-              // This ensures the UI reflects the read status immediately
-              final bool isMarkedAsRead = _markedAsReadIds.contains(notification.id) ||
-                                         notification.status == NotificationStatus.read;
-
-              return NotificationItem(
-                notification: notification,
-                isMarkedAsRead: isMarkedAsRead,
-                onAccept: () => _handleAccept(notification),
-                onReject: () => _handleReject(notification),
-                onDismiss: () => _handleDismiss(notification),
+              // Show a snackbar to indicate refresh
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Refreshing notifications...'),
+                  duration: Duration(seconds: 1),
+                ),
               );
             },
-          );
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          // Force a refresh of notifications
+          final notificationService = ref.read(notificationServiceProvider);
+          await notificationService.checkAndSendUnreadNotifications();
+          Logger.d('NotificationsScreen', 'Refreshed notifications via pull-to-refresh');
         },
+        child: StreamBuilder<List<NotificationModel>>(
+          stream: notificationService.getNotifications(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (snapshot.hasError) {
+              return Center(
+                child: Text('Error: ${snapshot.error}'),
+              );
+            }
+
+            final notifications = snapshot.data ?? [];
+
+            if (notifications.isEmpty) {
+              // Use a ListView with a single item to ensure pull-to-refresh works
+              return ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemCount: 1,
+                itemBuilder: (context, index) {
+                  return Container(
+                    height: MediaQuery.of(context).size.height * 0.7,
+                    alignment: Alignment.center,
+                    child: const Text('No notifications yet'),
+                  );
+                },
+              );
+            }
+
+            return ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(), // Ensure pull-to-refresh works
+              itemCount: notifications.length,
+              itemBuilder: (context, index) {
+                final notification = notifications[index];
+                // Check if this notification has been marked as read locally
+                // This ensures the UI reflects the read status immediately
+                final bool isMarkedAsRead = _markedAsReadIds.contains(notification.id) ||
+                                           notification.status == NotificationStatus.read;
+
+                return NotificationItem(
+                  notification: notification,
+                  isMarkedAsRead: isMarkedAsRead,
+                  onAccept: () => _handleAccept(notification),
+                  onReject: () => _handleReject(notification),
+                  onDismiss: () => _handleDismiss(notification),
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -129,15 +167,44 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   Future<void> _handleAccept(NotificationModel notification) async {
     try {
       final notificationService = ref.read(notificationServiceProvider);
-      await notificationService.acceptJoinRequest(notification.id, notification.eventId);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Join request accepted')),
+      if (notification.type == NotificationType.joinRequest) {
+        // Handle join request acceptance
+        await notificationService.acceptJoinRequest(notification.id, notification.eventId);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Join request accepted')),
+          );
+        }
+      } else if (notification.type == NotificationType.eventInvitation) {
+        // Handle event invitation acceptance
+        final rsvpService = ref.read(rsvpServiceProvider);
+
+        // First find the invitation ID
+        final invitations = await rsvpService.getRSVPs().first;
+        final invitation = invitations.firstWhere(
+          (inv) => inv.eventId == notification.eventId && inv.inviterId == notification.senderId,
+          orElse: () => throw Exception('Invitation not found'),
         );
+
+        // Accept the invitation
+        await rsvpService.acceptInvitation(invitation.id);
+
+        // Mark the notification as accepted
+        await notificationService.updateNotificationStatus(
+          notification.id,
+          NotificationStatus.accepted
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Event invitation accepted')),
+          );
+        }
       }
     } catch (e) {
-      Logger.e('NotificationsScreen', 'Error accepting join request', e);
+      Logger.e('NotificationsScreen', 'Error accepting notification', e);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: ${e.toString()}')),
@@ -149,15 +216,44 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   Future<void> _handleReject(NotificationModel notification) async {
     try {
       final notificationService = ref.read(notificationServiceProvider);
-      await notificationService.rejectJoinRequest(notification.id, notification.eventId);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Join request rejected')),
+      if (notification.type == NotificationType.joinRequest) {
+        // Handle join request rejection
+        await notificationService.rejectJoinRequest(notification.id, notification.eventId);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Join request rejected')),
+          );
+        }
+      } else if (notification.type == NotificationType.eventInvitation) {
+        // Handle event invitation rejection
+        final rsvpService = ref.read(rsvpServiceProvider);
+
+        // First find the invitation ID
+        final invitations = await rsvpService.getRSVPs().first;
+        final invitation = invitations.firstWhere(
+          (inv) => inv.eventId == notification.eventId && inv.inviterId == notification.senderId,
+          orElse: () => throw Exception('Invitation not found'),
         );
+
+        // Decline the invitation
+        await rsvpService.declineInvitation(invitation.id);
+
+        // Mark the notification as rejected
+        await notificationService.updateNotificationStatus(
+          notification.id,
+          NotificationStatus.rejected
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Event invitation rejected')),
+          );
+        }
       }
     } catch (e) {
-      Logger.e('NotificationsScreen', 'Error rejecting join request', e);
+      Logger.e('NotificationsScreen', 'Error rejecting notification', e);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: ${e.toString()}')),
@@ -329,15 +425,11 @@ class NotificationItem extends ConsumerWidget {
                             ),
                           ),
                           if (!isMarkedAsRead)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  shape: BoxShape.circle,
-                                ),
+                            const Padding(
+                              padding: EdgeInsets.only(top: 4.0),
+                              child: NotificationBadge(
+                                count: 1,
+                                size: 8.0,
                               ),
                             ),
                         ],
@@ -348,11 +440,13 @@ class NotificationItem extends ConsumerWidget {
               ),
 
               // Event info
-              if (notification.type == NotificationType.joinRequest)
+              if (notification.type == NotificationType.joinRequest ||
+                  notification.type == NotificationType.eventInvitation)
                 EventInfoWidget(eventId: notification.eventId),
 
-              // Action buttons for pending join requests
-              if (notification.type == NotificationType.joinRequest &&
+              // Action buttons for pending join requests and event invitations
+              if ((notification.type == NotificationType.joinRequest ||
+                   notification.type == NotificationType.eventInvitation) &&
                   notification.status == NotificationStatus.pending)
                 Padding(
                   padding: const EdgeInsets.only(top: 16.0),

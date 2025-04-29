@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/notification_service.dart';
+import 'notification_badge.dart';
 
 class HomeHeader extends ConsumerStatefulWidget {
   final Function()? onMenuPressed;
@@ -21,24 +22,13 @@ class HomeHeader extends ConsumerStatefulWidget {
 }
 
 class _HomeHeaderState extends ConsumerState<HomeHeader> {
-  // List of available filters
-  final List<String> _filters = ["JOINED", "NEW", "SHOW ALL"];
-
-  // Controller for horizontal swiping
-  late final PageController _pageController;
-
   @override
   void initState() {
     super.initState();
-    // Initialize the controller with the correct initial page
-    int initialPage = _filters.indexOf(widget.currentFilter);
-    if (initialPage == -1) initialPage = 1; // Default to NEW if not found
-    _pageController = PageController(initialPage: initialPage);
   }
 
   @override
   void dispose() {
-    _pageController.dispose();
     super.dispose();
   }
 
@@ -59,6 +49,7 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
                   final unreadCount = snapshot.data ?? 0;
 
                   return Stack(
+                    clipBehavior: Clip.none,
                     children: [
                       IconButton(
                         icon: const Icon(Icons.menu),
@@ -69,29 +60,21 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
                       ),
                       if (unreadCount > 0)
                         Positioned(
-                          right: 0,
-                          top: 2,
-                          child: Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            constraints: const BoxConstraints(
-                              minWidth: 12,
-                              minHeight: 12,
-                            ),
-                            child: Text(
-                              unreadCount > 9 ? '9+' : '$unreadCount',
-                              style: const TextStyle(color: Colors.white, fontSize: 12),
-                              textAlign: TextAlign.center,
-                            ),
+                          // Position the badge to overlap with the icon
+                          right: 5,
+                          top: 5,
+                          child: NotificationBadge(
+                            count: unreadCount,
+                            size: 8.0,
                           ),
                         ),
                     ],
                   );
                 },
               ),
+
+              // Center section - empty space
+              const SizedBox(width: 28),
 
               // QR code scanner
               IconButton(
@@ -143,4 +126,6 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
       ),
     );
   }
+
+
 }

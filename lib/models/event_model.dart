@@ -13,6 +13,7 @@ class EventModel {
   List<String> likedBy;
   List<String> joinedBy;
   final int? attendeeLimit;
+  final bool isInvited; // Flag to indicate if the current user was invited to this event
 
   EventModel({
     this.id = '',
@@ -26,6 +27,7 @@ class EventModel {
     List<String>? likedBy,
     List<String>? joinedBy,
     this.attendeeLimit,
+    this.isInvited = false,
   }) : createdAt = createdAt ?? DateTime.now(),
        likedBy = likedBy ?? [],
        joinedBy = joinedBy ?? [];
@@ -92,6 +94,10 @@ class EventModel {
       attendeeLimit = data['attendeeLimit'] as int;
     }
 
+    // The isInvited property is not stored in Firestore
+    // It's set programmatically when events are fetched from RSVPs
+    // Default is false
+
     return EventModel(
       id: doc.id,
       userId: data['userId'] as String,
@@ -104,6 +110,7 @@ class EventModel {
       likedBy: likedBy,
       joinedBy: joinedBy,
       attendeeLimit: attendeeLimit,
+      isInvited: false, // Default to false, will be set to true for invited events
     );
   }
 
@@ -120,6 +127,7 @@ class EventModel {
     List<String>? likedBy,
     List<String>? joinedBy,
     int? attendeeLimit,
+    bool? isInvited,
   }) {
     return EventModel(
       id: id ?? this.id,
@@ -133,6 +141,48 @@ class EventModel {
       likedBy: likedBy ?? this.likedBy,
       joinedBy: joinedBy ?? this.joinedBy,
       attendeeLimit: attendeeLimit ?? this.attendeeLimit,
+      isInvited: isInvited ?? this.isInvited,
     );
   }
+
+  // Override equals to properly identify duplicate events
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    if (other is! EventModel) return false;
+
+    // Two events are considered equal if they have the same ID
+    // OR if they have the same content (same user, inquiry, date, time)
+    return id == other.id ||
+           (userId == other.userId &&
+            inquiry == other.inquiry &&
+            _isSameDate(date, other.date) &&
+            _isSameTime(time, other.time));
+  }
+
+  // Helper method to compare dates (ignoring time component)
+  bool _isSameDate(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  // Helper method to compare TimeOfDay
+  bool _isSameTime(TimeOfDay a, TimeOfDay b) {
+    return a.hour == b.hour && a.minute == b.minute;
+  }
+
+  // Override hashCode to be consistent with equals
+  @override
+  int get hashCode {
+    // Use a combination of userId, inquiry, date and time for the hash
+    return Object.hash(
+      userId,
+      inquiry,
+      Object.hash(date.year, date.month, date.day),
+      Object.hash(time.hour, time.minute)
+    );
+  }
+
+  // Generate a unique content key for this event
+  String get contentKey => '$userId-$inquiry-${date.year}-${date.month}-${date.day}-${time.hour}-${time.minute}';
 }

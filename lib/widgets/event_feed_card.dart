@@ -1,20 +1,26 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/prefetch_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../services/rsvp_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/event_model.dart';
 import '../screens/chat/chat_room_screen.dart';
+import '../screens/event_management_screen.dart';
 import '../services/event_user_service.dart';
 import '../services/event_service.dart';
 import '../services/notification_service.dart';
 import '../utils/date_formatter.dart';
 import '../utils/logger.dart';
+import '../utils/confirmation_dialog.dart';
 import 'user_profile_dialog.dart';
 
 class EventFeedCard extends ConsumerStatefulWidget {
@@ -39,10 +45,104 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
   bool _hasPendingRequest = false;
   bool _hasRejectedRequest = false;
 
+  // Store the current event state locally
+  late EventModel _currentEvent;
+
+  // Stream subscription for document-level updates
+  StreamSubscription<DocumentSnapshot>? _eventSubscription;
+
   @override
   void initState() {
     super.initState();
-    _checkPendingRequest();
+    try {
+      // Initialize the current event from the widget
+      _currentEvent = widget.event;
+
+      // Validate event data
+      if (_currentEvent.id.isEmpty) {
+        Logger.e('EventFeedCard', 'Event has an empty ID, skipping initialization');
+        return;
+      }
+
+      // Check for pending join requests
+      _checkPendingRequest();
+
+      // Subscribe to document-level updates
+      _subscribeToEventUpdates();
+
+      // Track event view for prefetching
+      _trackEventView();
+    } catch (e) {
+      // Log any errors during initialization
+      Logger.e('EventFeedCard', 'Error initializing event card: $e');
+    }
+  }
+
+  // Track event view for prefetching
+  void _trackEventView() {
+    try {
+      final prefetchService = ref.read(prefetchServiceProvider);
+      prefetchService.trackEventView(_currentEvent.id);
+
+      // Also track interaction with the event creator
+      prefetchService.trackUserInteraction(_currentEvent.userId);
+    } catch (e) {
+      // Silently ignore errors in tracking
+      Logger.d('EventFeedCard', 'Error tracking event view: $e');
+    }
+  }
+
+  void _subscribeToEventUpdates() {
+    try {
+      final eventId = widget.event.id;
+      if (eventId.isEmpty) {
+        Logger.e('EventFeedCard', 'Cannot subscribe to updates for event with empty ID');
+        return;
+      }
+
+      final eventsCollection = FirebaseFirestore.instance.collection('events');
+
+      _eventSubscription = eventsCollection.doc(eventId).snapshots().listen(
+        (snapshot) {
+          if (!mounted) return;
+
+          try {
+            if (snapshot.exists) {
+              final updatedEvent = EventModel.fromFirestore(snapshot);
+              // Only update if there are actual changes to the event
+              if (_hasRelevantChanges(_currentEvent, updatedEvent)) {
+                setState(() {
+                  _currentEvent = updatedEvent;
+                });
+              }
+            } else {
+              Logger.d('EventFeedCard', 'Event document no longer exists: $eventId');
+            }
+          } catch (e) {
+            Logger.e('EventFeedCard', 'Error processing event snapshot: $e');
+          }
+        },
+        onError: (error) {
+          Logger.e('EventFeedCard', 'Error in event subscription: $error');
+        },
+      );
+    } catch (e) {
+      Logger.e('EventFeedCard', 'Error setting up event subscription: $e');
+    }
+  }
+
+  bool _hasRelevantChanges(EventModel oldEvent, EventModel newEvent) {
+    // Only check fields that would affect the UI
+    return oldEvent.likedBy.length != newEvent.likedBy.length ||
+           oldEvent.joinedBy.length != newEvent.joinedBy.length ||
+           oldEvent.inquiry != newEvent.inquiry;
+  }
+
+  @override
+  void dispose() {
+    // Cancel the subscription when the widget is disposed
+    _eventSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkPendingRequest() async {
@@ -72,7 +172,7 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
 
     try {
       final eventService = ref.read(eventServiceProvider);
-      final isLiked = await eventService.toggleLike(widget.event.id);
+      final isLiked = await eventService.toggleLike(_currentEvent.id);
 
       // Force update the UI immediately
       if (mounted) {
@@ -80,12 +180,12 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
           // Update the local event model to reflect the change
           if (isLiked) {
             // Add current user to likedBy if not already there
-            if (!widget.event.likedBy.contains(eventService.getCurrentUserId())) {
-              widget.event.likedBy.add(eventService.getCurrentUserId());
+            if (!_currentEvent.likedBy.contains(eventService.getCurrentUserId())) {
+              _currentEvent.likedBy.add(eventService.getCurrentUserId());
             }
           } else {
             // Remove current user from likedBy
-            widget.event.likedBy.remove(eventService.getCurrentUserId());
+            _currentEvent.likedBy.remove(eventService.getCurrentUserId());
           }
         });
       }
@@ -117,25 +217,43 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
     try {
       final eventService = ref.read(eventServiceProvider);
       final notificationService = ref.read(notificationServiceProvider);
+      final rsvpService = ref.read(rsvpServiceProvider);
 
       // We don't need to check if this is the event creator here
       // since the button is disabled for event creators
 
       // If user is already in the event (has joined), handle leave
-      if (widget.event.joinedBy.contains(eventService.getCurrentUserId())) {
-        await eventService.toggleJoin(widget.event.id);
+      if (_currentEvent.joinedBy.contains(eventService.getCurrentUserId())) {
+        // Show confirmation dialog
+        final confirmed = await ConfirmationDialog.show(
+          context: context,
+          title: 'Leave Event',
+          message: 'Are you sure you want to leave this event?',
+          confirmText: 'Leave',
+          isDestructive: true,
+        );
+
+        if (!confirmed) {
+          setState(() {
+            _isJoinLoading = false;
+          });
+          return;
+        }
+
+        await eventService.toggleJoin(_currentEvent.id);
 
         // Force update the UI immediately
         if (mounted) {
           setState(() {
             // Remove current user from joinedBy
-            widget.event.joinedBy.remove(eventService.getCurrentUserId());
-
-            // Show a message
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('You have left this event.'))
-            );
+            _currentEvent.joinedBy.remove(eventService.getCurrentUserId());
           });
+
+          // Show a message
+          final scaffoldMessenger = ScaffoldMessenger.of(context);
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(content: Text('You have left this event.'))
+          );
         }
       }
       // If user has a pending request, show message
@@ -152,19 +270,46 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
       }
       // If this is a new join request
       else {
-        // Create a join request notification
-        await notificationService.createJoinRequest(widget.event);
+        // Check if the user was invited to this event
+        final wasInvited = await rsvpService.isUserInvited(_currentEvent.id, eventService.getCurrentUserId());
 
-        // Update UI to show pending state
-        if (mounted) {
-          setState(() {
-            _hasPendingRequest = true;
+        if (wasInvited || _currentEvent.isInvited) {
+          // If the user was invited, directly join the event without requiring approval
+          // and create a notification for the event creator
+          await notificationService.createJoinRequest(_currentEvent);
 
-            // Show a message
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Join request sent. Waiting for approval from the event creator.'))
-            );
-          });
+          // Force update the UI immediately
+          if (mounted) {
+            setState(() {
+              // Add current user to joinedBy
+              if (!_currentEvent.joinedBy.contains(eventService.getCurrentUserId())) {
+                _currentEvent.joinedBy.add(eventService.getCurrentUserId());
+              }
+
+              // Show a message
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('You have joined the event!'))
+              );
+            });
+          }
+
+          // Call the onJoin callback to update the parent widget
+          widget.onJoin();
+        } else {
+          // For non-invited users, create a join request notification
+          await notificationService.createJoinRequest(_currentEvent);
+
+          // Update UI to show pending state
+          if (mounted) {
+            setState(() {
+              _hasPendingRequest = true;
+
+              // Show a message
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Join request sent. Waiting for approval from the event creator.'))
+              );
+            });
+          }
         }
       }
     } catch (e) {
@@ -185,9 +330,16 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
   }
   // Download QR code as image
   Future<void> _downloadQrCode(BuildContext context, GlobalKey qrKey, String fileName) async {
+    // Store the context before any async operations
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     try {
       // Find the RenderRepaintBoundary
-      final RenderRepaintBoundary boundary = qrKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      final RenderRepaintBoundary? boundary = qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+
+      if (boundary == null) {
+        throw Exception('QR code render object not found');
+      }
 
       // Capture the image
       final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
@@ -216,14 +368,14 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
 
       // Show success message
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           const SnackBar(content: Text('QR code shared successfully!'))
         );
       }
     } catch (e) {
       Logger.e('EventFeedCard', 'Error downloading QR code', e);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           SnackBar(content: Text('Error: ${e.toString()}'))
         );
       }
@@ -233,12 +385,11 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
   // Build event type image based on activity type
   Widget _buildEventTypeImage(String activityType) {
     // Normalize the activity type to match the image naming convention
-    // Convert to title case and handle any special cases
     String normalizedType = activityType.trim();
 
     // Check if the activity type matches one of our image assets
-    // The available types are: Celebrate, Drink, Eating, Play, Visit, Walk
-    final validTypes = ['Celebrate', 'Run','Drink', 'Eating', 'Play', 'Visit', 'Walk'];
+    // The available types are: Celebrate, Drink, Eat, Play, Run, Visit, Walk, Watch
+    final validTypes = ['Celebrate', 'Drink', 'Eat', 'Play', 'Run', 'Visit', 'Walk', 'Watch'];
 
     // If the exact type isn't found, try to find a close match
     if (!validTypes.contains(normalizedType)) {
@@ -250,8 +401,9 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
           if (normalizedType.toLowerCase().contains('eat') ||
               normalizedType.toLowerCase().contains('food') ||
               normalizedType.toLowerCase().contains('dinner') ||
-              normalizedType.toLowerCase().contains('lunch')) {
-            return 'Eating';
+              normalizedType.toLowerCase().contains('lunch') ||
+              normalizedType.toLowerCase().contains('restaurant')) {
+            return 'Eat';
           } else if (normalizedType.toLowerCase().contains('drink') ||
                     normalizedType.toLowerCase().contains('coffee') ||
                     normalizedType.toLowerCase().contains('bar')) {
@@ -261,9 +413,12 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                     normalizedType.toLowerCase().contains('sport')) {
             return 'Play';
           } else if (normalizedType.toLowerCase().contains('walk') ||
-                    normalizedType.toLowerCase().contains('hike') ||
-                    normalizedType.toLowerCase().contains('run')) {
+                    normalizedType.toLowerCase().contains('hike')) {
             return 'Walk';
+          } else if (normalizedType.toLowerCase().contains('run') ||
+                    normalizedType.toLowerCase().contains('jog') ||
+                    normalizedType.toLowerCase().contains('marathon')) {
+            return 'Run';
           } else if (normalizedType.toLowerCase().contains('visit') ||
                     normalizedType.toLowerCase().contains('tour') ||
                     normalizedType.toLowerCase().contains('travel')) {
@@ -272,6 +427,11 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                     normalizedType.toLowerCase().contains('party') ||
                     normalizedType.toLowerCase().contains('event')) {
             return 'Celebrate';
+          } else if (normalizedType.toLowerCase().contains('watch') ||
+                    normalizedType.toLowerCase().contains('movie') ||
+                    normalizedType.toLowerCase().contains('show') ||
+                    normalizedType.toLowerCase().contains('concert')) {
+            return 'Watch';
           }
 
           // Default to 'Celebrate' if no match is found
@@ -280,7 +440,7 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
       );
     }
 
-    // Construct the asset path
+    // Construct the asset path following the naming convention '[event-type]-Card.jpg'
     final assetPath = 'assets/images/$normalizedType-Card.jpg';
 
     Logger.d('EventFeedCard', 'Loading image for activity type: $activityType, using asset: $assetPath');
@@ -308,10 +468,35 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
 
   // Show user profile dialog
   void _showUserProfileDialog(BuildContext context, String userId) {
+    // Track user interaction for prefetching
+    try {
+      final prefetchService = ref.read(prefetchServiceProvider);
+      prefetchService.trackUserInteraction(userId);
+    } catch (e) {
+      // Silently ignore errors in tracking
+      Logger.d('EventFeedCard', 'Error tracking user interaction: $e');
+    }
+
     showDialog(
       context: context,
       builder: (context) => UserProfileDialog(userId: userId),
     );
+  }
+
+  // Handle ignore button press
+  Future<void> _handleIgnore(BuildContext context) async {
+    // Show confirmation dialog
+    final confirmed = await ConfirmationDialog.show(
+      context: context,
+      title: 'Ignore Event',
+      message: 'Are you sure you want to ignore this event? It will be removed from your feed.',
+      confirmText: 'Ignore',
+      isDestructive: true,
+    );
+
+    if (confirmed) {
+      widget.onIgnore();
+    }
   }
 
   // Show QR code dialog
@@ -403,19 +588,19 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
     final eventService = ref.read(eventServiceProvider);
 
     // Get real values for engagement stats
-    final int likesCount = widget.event.likedBy.length;
-    final int attendeesCount = widget.event.joinedBy.length;
+    final int likesCount = _currentEvent.likedBy.length;
+    final int attendeesCount = _currentEvent.joinedBy.length;
 
     // Check if current user has joined
-    final bool hasJoined = eventService.hasJoined(widget.event);
+    final bool hasJoined = eventService.hasJoined(_currentEvent);
 
     // Check if current user is the event creator
     final String currentUserId = eventService.getCurrentUserId();
-    final bool isEventCreator = widget.event.userId == currentUserId;
+    final bool isEventCreator = _currentEvent.userId == currentUserId;
 
     // Check if attendee limit is reached
-    final bool hasAttendeeLimit = widget.event.attendeeLimit != null;
-    final bool isLimitReached = hasAttendeeLimit && attendeesCount >= widget.event.attendeeLimit!;
+    final bool hasAttendeeLimit = _currentEvent.attendeeLimit != null;
+    final bool isLimitReached = hasAttendeeLimit && attendeesCount >= _currentEvent.attendeeLimit!;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -430,14 +615,14 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
         children: [
           // Card Header with gradient background based on account type
           FutureBuilder<bool>(
-            future: ref.read(eventUserServiceProvider).isBusinessAccount(widget.event.userId),
+            future: ref.read(eventUserServiceProvider).isBusinessAccount(_currentEvent.userId),
             builder: (context, snapshot) {
               final isBusiness = snapshot.data ?? false;
-              Logger.d('EventFeedCard', 'isBusinessAccount for ${widget.event.userId} = $isBusiness');
+              Logger.d('EventFeedCard', 'isBusinessAccount for ${_currentEvent.userId} = $isBusiness');
 
               // Define colors based on account type
               final Color headerStartColor = isBusiness ? const Color(0xFFE6C34E) : const Color(0xFF1A5F7A);
-              final Color headerEndColor = const Color(0xFF0A2942);
+              const Color headerEndColor = Color(0xFF0A2942);
               final Color borderColor = isBusiness ? const Color(0xFFE6C34E) : Theme.of(context).colorScheme.secondary;
 
               return Container(
@@ -453,7 +638,7 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                   children: [
                     // User Avatar with business/personal border
                     FutureBuilder<String?>(
-                      future: ref.read(eventUserServiceProvider).getUserProfileImageUrl(widget.event.userId),
+                      future: ref.read(eventUserServiceProvider).getUserProfileImageUrl(_currentEvent.userId),
                       builder: (context, imageSnapshot) {
                         if (imageSnapshot.connectionState == ConnectionState.waiting) {
                           return const SizedBox(
@@ -512,7 +697,7 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
 
                         // Wrap the profile image in a GestureDetector to show profile dialog on tap
                         return GestureDetector(
-                          onTap: () => _showUserProfileDialog(context, widget.event.userId),
+                          onTap: () => _showUserProfileDialog(context, _currentEvent.userId),
                           child: profileImage,
                         );
                       },
@@ -526,7 +711,7 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                         children: [
                           // User display name
                           FutureBuilder<String>(
-                            future: ref.read(eventUserServiceProvider).getUserDisplayName(widget.event.userId),
+                            future: ref.read(eventUserServiceProvider).getUserDisplayName(_currentEvent.userId),
                             builder: (context, snapshot) {
                               if (snapshot.connectionState == ConnectionState.waiting) {
                                 return const SizedBox(
@@ -551,7 +736,7 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                           const SizedBox(height: 2),
                           // Username
                           FutureBuilder<String>(
-                            future: ref.read(eventUserServiceProvider).getUserUsername(widget.event.userId),
+                            future: ref.read(eventUserServiceProvider).getUserUsername(_currentEvent.userId),
                             builder: (context, snapshot) {
                               if (snapshot.connectionState == ConnectionState.waiting) {
                                 return const SizedBox(
@@ -584,7 +769,7 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                         size: 24,
                       ),
                       onPressed: () {
-                        _showQrCodeDialog(context, widget.event.id);
+                        _showQrCodeDialog(context, _currentEvent.id);
                       },
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -603,7 +788,7 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                 onTap: _handleLike, // Like on tap
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
-                  child: _buildEventTypeImage(widget.event.activityType),
+                  child: _buildEventTypeImage(_currentEvent.activityType),
                 ),
               ),
 
@@ -654,14 +839,14 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                   children: [
                     const SizedBox(height: 2),
                       Text(
-                        widget.event.activityType,
+                        _currentEvent.activityType,
                         style: TextStyle(
                           color: theme.textTheme.bodySmall?.color,
                           fontSize: 12,
                         ),
                       ),
                     Text(
-                      '${DateFormatter.formatMonthShort(widget.event.date)} ${widget.event.date.day} @ ${widget.event.time.format(context)}',
+                      '${DateFormatter.formatMonthShort(_currentEvent.date)} ${_currentEvent.date.day} @ ${_currentEvent.time.format(context)}',
                       style: TextStyle(
                         color: theme.textTheme.bodySmall?.color,
                         fontSize: 12,
@@ -680,7 +865,7 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                       children: [
                         Text(
                           hasAttendeeLimit
-                            ? "$attendeesCount/${widget.event.attendeeLimit} joined"
+                            ? "$attendeesCount/${_currentEvent.attendeeLimit} joined"
                             : "$attendeesCount joined",
                           style: TextStyle(
                             color: theme.textTheme.bodySmall?.color,
@@ -696,14 +881,37 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
             ),
           ),
 
-          // Event Inquiry
+          // Event Inquiry with Invited flag if applicable
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Text(
-              widget.event.inquiry,
-              style: theme.textTheme.bodyMedium?.copyWith(fontSize: 16),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Show "Invited" flag if the user was invited to this event
+                if (_currentEvent.isInvited)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A5F7A).withAlpha(51), // 0.2 opacity = 51/255
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'INVITED',
+                      style: TextStyle(
+                        color: Color(0xFF1A5F7A),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                Text(
+                  _currentEvent.inquiry,
+                  style: theme.textTheme.bodyMedium?.copyWith(fontSize: 16),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
 
@@ -718,7 +926,7 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                 // Ignore Button
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: isEventCreator ? null : widget.onIgnore, // Disable if user is event creator
+                    onPressed: isEventCreator ? null : () => _handleIgnore(context), // Disable if user is event creator
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.red[400],
                       side: BorderSide(color: isEventCreator ? Colors.grey : Colors.red[400]!),
@@ -747,13 +955,27 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                             // Navigate to chat room
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (context) => ChatRoomScreen(event: widget.event),
+                                builder: (context) => ChatRoomScreen(event: _currentEvent),
                               ),
                             );
                           } else if (value == 'manage') {
-                            // TODO: Implement event management functionality
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Event management coming soon'))
+                            // Navigate to event management screen
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => EventManagementScreen(
+                                  event: _currentEvent,
+                                  onEventUpdated: (updatedEvent) {
+                                    setState(() {
+                                      _currentEvent = updatedEvent;
+                                    });
+                                  },
+                                  onEventDeleted: () {
+                                    // The navigation to home screen is handled in the EventManagementScreen
+                                    // This callback is still needed for the EventManagementScreen
+                                    Logger.d('EventFeedCard', 'Event deleted callback triggered');
+                                  },
+                                ),
+                              ),
                             );
                           }
                         },
@@ -814,7 +1036,7 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                                 // Navigate to chat room
                                 Navigator.of(context).push(
                                   MaterialPageRoute(
-                                    builder: (context) => ChatRoomScreen(event: widget.event),
+                                    builder: (context) => ChatRoomScreen(event: _currentEvent),
                                   ),
                                 );
                               } else if (value == 'leave') {

@@ -10,6 +10,7 @@ import '../../providers/onboarding_provider.dart';
 import '../../providers/user_cache_provider.dart';
 import '../../services/follow_service.dart';
 import '../../utils/logger.dart';
+import '../../utils/confirmation_dialog.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   final String? userId; // Optional userId parameter, if null shows current user's profile
@@ -352,16 +353,32 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       return const Icon(Icons.person, size: 60, color: Colors.white70);
     }
 
+    // Generate a unique key that includes both the user ID and a timestamp
+    // This forces the widget to rebuild when the user changes
+    final cacheKey = '${userId ?? "unknown"}_profile_image';
+
+    // Add a timestamp to the URL as a query parameter to bypass cache
+    final timestampedUrl = '$imageUrl${imageUrl.contains('?') ? '&' : '?'}t=${DateTime.now().millisecondsSinceEpoch}';
+
+    Logger.d('ProfileScreen', 'Loading profile image for user: $userId, URL: $timestampedUrl');
+
     return ClipOval(
+      // Use a unique key to force rebuild when user changes
+      key: ValueKey('profile_image_${userId ?? "unknown"}_${DateTime.now().millisecondsSinceEpoch}'),
       child: CachedNetworkImage(
-        imageUrl: imageUrl,
+        imageUrl: timestampedUrl,
         placeholder: (context, url) => const CircularProgressIndicator(),
-        errorWidget: (context, url, error) => const Icon(Icons.error),
+        errorWidget: (context, url, error) {
+          Logger.e('ProfileScreen', 'Error loading profile image: $error');
+          return const Icon(Icons.error);
+        },
         fit: BoxFit.cover,
         width: 120,
         height: 120,
-        // Use user ID in the cache key to ensure user-specific caching
-        cacheKey: '${userId ?? "unknown"}_profile_image',
+        cacheKey: cacheKey,
+        // Disable caching in memory to ensure fresh image is loaded
+        memCacheWidth: null,
+        memCacheHeight: null,
       ),
     );
   }
@@ -548,6 +565,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       final followService = ref.read(followServiceProvider);
 
       if (_isFollowing) {
+        // Show confirmation dialog before unfollowing
+        final confirmed = await ConfirmationDialog.show(
+          context: context,
+          title: 'Unfollow User',
+          message: 'Are you sure you want to unfollow ${_getUserDisplayName(null, null, ref)}?',
+          confirmText: 'Unfollow',
+          isDestructive: true,
+        );
+
+        if (!confirmed) {
+          setState(() {
+            _isFollowLoading = false;
+          });
+          return;
+        }
+
         // Unfollow user
         await followService.unfollowUser(widget.userId!);
         setState(() {
@@ -555,7 +588,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           _followersCount--;
         });
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          final scaffoldMessenger = ScaffoldMessenger.of(context);
+          scaffoldMessenger.showSnackBar(
             SnackBar(content: Text('Unfollowed ${_getUserDisplayName(null, null, ref)}'))
           );
         }
@@ -567,7 +601,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           _followersCount++;
         });
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          final scaffoldMessenger = ScaffoldMessenger.of(context);
+          scaffoldMessenger.showSnackBar(
             SnackBar(content: Text('Following ${_getUserDisplayName(null, null, ref)}'))
           );
         }
@@ -575,7 +610,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     } catch (e) {
       Logger.e('ProfileScreen', 'Error following/unfollowing user', e);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        final scaffoldMessenger = ScaffoldMessenger.of(context);
+        scaffoldMessenger.showSnackBar(
           SnackBar(content: Text('Error: $e'))
         );
       }

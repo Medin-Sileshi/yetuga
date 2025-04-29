@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../services/follow_service.dart';
 import '../services/event_user_service.dart';
 import '../utils/logger.dart';
+import '../utils/confirmation_dialog.dart';
 
 class UserProfileDialog extends ConsumerStatefulWidget {
   final String userId;
@@ -48,10 +49,10 @@ class _UserProfileDialogState extends ConsumerState<UserProfileDialog> {
       final username = await eventUserService.getUserUsername(widget.userId);
       final profileImageUrl = await eventUserService.getUserProfileImageUrl(widget.userId);
       final isBusiness = await eventUserService.isBusinessAccount(widget.userId);
-      
+
       // Check if current user is following this user
       final isFollowing = await followService.isFollowing(widget.userId);
-      
+
       // Get follower and following counts
       final followersCount = await followService.getFollowersCount(widget.userId);
       final followingCount = await followService.getFollowingCount(widget.userId);
@@ -89,6 +90,22 @@ class _UserProfileDialogState extends ConsumerState<UserProfileDialog> {
       final followService = ref.read(followServiceProvider);
 
       if (_isFollowing) {
+        // Show confirmation dialog before unfollowing
+        final confirmed = await ConfirmationDialog.show(
+          context: context,
+          title: 'Unfollow User',
+          message: 'Are you sure you want to unfollow $_displayName?',
+          confirmText: 'Unfollow',
+          isDestructive: true,
+        );
+
+        if (!confirmed) {
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
+
         // Unfollow user
         await followService.unfollowUser(widget.userId);
         if (mounted) {
@@ -97,7 +114,9 @@ class _UserProfileDialogState extends ConsumerState<UserProfileDialog> {
             _followersCount--;
             _isLoading = false;
           });
-          ScaffoldMessenger.of(context).showSnackBar(
+
+          final scaffoldMessenger = ScaffoldMessenger.of(context);
+          scaffoldMessenger.showSnackBar(
             SnackBar(content: Text('Unfollowed $_displayName'))
           );
         }
@@ -134,7 +153,7 @@ class _UserProfileDialogState extends ConsumerState<UserProfileDialog> {
     final primaryColor = theme.colorScheme.primary;
     final secondaryColor = theme.colorScheme.secondary;
     final textColor = theme.textTheme.bodyLarge?.color ?? Colors.white;
-    
+
     // Border color based on account type
     final borderColor = _isBusiness ? const Color(0xFFE6C34E) : secondaryColor;
 
@@ -194,7 +213,7 @@ class _UserProfileDialogState extends ConsumerState<UserProfileDialog> {
                           ),
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Display name
                   Text(
                     _displayName,
@@ -203,7 +222,7 @@ class _UserProfileDialogState extends ConsumerState<UserProfileDialog> {
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  
+
                   // Username
                   Text(
                     '@$_username',
@@ -212,9 +231,9 @@ class _UserProfileDialogState extends ConsumerState<UserProfileDialog> {
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  
+
                   const SizedBox(height: 16),
-                  
+
                   // Followers and Following counts
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -250,9 +269,9 @@ class _UserProfileDialogState extends ConsumerState<UserProfileDialog> {
                       ),
                     ],
                   ),
-                  
+
                   const SizedBox(height: 24),
-                  
+
                   // Follow/Unfollow button
                   SizedBox(
                     width: double.infinity,
@@ -284,9 +303,9 @@ class _UserProfileDialogState extends ConsumerState<UserProfileDialog> {
                             ),
                     ),
                   ),
-                  
+
                   const SizedBox(height: 8),
-                  
+
                   // Close button
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),

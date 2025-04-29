@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../utils/logger.dart';
 import 'google_sign_in_service.dart';
 import 'notification_service.dart';
+import 'user_cache_service.dart';
 
 // Provider for the AuthService
 final authServiceProvider = Provider<AuthService>((ref) {
@@ -102,6 +103,10 @@ class AuthService {
   // Sign out
   Future<void> signOut() async {
     try {
+      // Store the current user ID before signing out
+      final currentUserId = _auth.currentUser?.uid;
+      Logger.d('AuthService', 'Signing out user: $currentUserId');
+
       // Sign out from Google if signed in with Google
       try {
         await googleSignInService.signOut();
@@ -110,9 +115,30 @@ class AuthService {
         // Continue with Firebase sign out even if Google sign out fails
       }
 
+      // Clear user cache if we have a user ID
+      if (currentUserId != null) {
+        try {
+          // Clear user cache
+          await userCacheService.clearCache(currentUserId);
+          Logger.d('AuthService', 'Cleared user cache for: $currentUserId');
+        } catch (e) {
+          Logger.e('AuthService', 'Error clearing user cache', e);
+          // Continue with sign out even if cache clearing fails
+        }
+      }
+
       // Sign out from Firebase
       await _auth.signOut();
       Logger.d('AuthService', 'User signed out successfully');
+
+      // Force a reload of the current user to clear any cached data
+      try {
+        // This will force Firebase to clear its internal cache
+        await FirebaseAuth.instance.signOut();
+        Logger.d('AuthService', 'Cleared Firebase Auth cache');
+      } catch (e) {
+        Logger.e('AuthService', 'Error clearing Firebase Auth cache', e);
+      }
     } catch (e) {
       Logger.e('AuthService', 'Error signing out', e);
       rethrow;

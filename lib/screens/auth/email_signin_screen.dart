@@ -6,7 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/firebase_provider.dart';
 import '../../models/onboarding_data.dart';
 import '../../widgets/auth_page_template.dart';
-import '../home_screen.dart';
+import '../authenticated_home_screen.dart';
 import '../onboarding/onboarding_screen.dart';
 import 'create_account_screen.dart';
 import '../../providers/onboarding_provider.dart';
@@ -68,7 +68,45 @@ class _EmailSignInScreenState extends ConsumerState<EmailSignInScreen> {
         );
 
         try {
-          // Check Firebase directly for onboarding status
+          // First check Hive for cached onboarding data
+          final onboardingState = ref.read(onboardingProvider);
+
+          // Check if we have valid data in Hive
+          bool onboardingCompletedInHive = false;
+
+          await onboardingState.when(
+            data: (data) async {
+              if (data.isComplete()) {
+                onboardingCompletedInHive = true;
+                Logger.d('EmailSigninScreen', 'Onboarding is completed in Hive: ${data.toString()}');
+              } else {
+                Logger.d('EmailSigninScreen', 'Onboarding is not completed in Hive');
+              }
+            },
+            loading: () {
+              Logger.d('EmailSigninScreen', 'Onboarding data is loading from Hive');
+            },
+            error: (error, stack) {
+              Logger.d('EmailSigninScreen', 'Error loading onboarding data from Hive: $error');
+            },
+          );
+
+          // If onboarding is completed in Hive, navigate to home screen
+          if (onboardingCompletedInHive) {
+            // Close the loading dialog
+            if (context.mounted) {
+              Navigator.of(context).pop();
+
+              // Navigate to home screen
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const AuthenticatedHomeScreen()),
+                (route) => false,
+              );
+              return; // Exit early
+            }
+          }
+
+          // If not found in Hive, check Firebase
           final firebaseService = ref.read(firebaseServiceProvider);
           final userProfile = await firebaseService.getUserProfile();
           Logger.d('EmailSigninScreen', 'User profile from Firebase: $userProfile');
@@ -107,7 +145,7 @@ class _EmailSignInScreenState extends ConsumerState<EmailSignInScreen> {
 
             if (context.mounted) {
               Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const HomeScreen()),
+                MaterialPageRoute(builder: (context) => const AuthenticatedHomeScreen()),
                 (route) => false,
               );
             }
@@ -127,35 +165,45 @@ class _EmailSignInScreenState extends ConsumerState<EmailSignInScreen> {
             Navigator.of(context).pop();
           }
 
-          // Fall back to checking the onboarding provider
+          // Fall back to checking the onboarding provider again
+          // This is a safety check in case the first check missed something
           final onboardingState = ref.read(onboardingProvider);
-          onboardingState.when(
-            data: (data) {
+
+          // Check if we have valid data in Hive one more time
+          bool onboardingCompletedInHive = false;
+
+          await onboardingState.when(
+            data: (data) async {
               if (data.isComplete()) {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (context) => const HomeScreen()),
-                  (route) => false,
-                );
-              } else {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (context) => const OnboardingScreen()),
-                  (route) => false,
-                );
+                onboardingCompletedInHive = true;
+                Logger.d('EmailSigninScreen', 'Onboarding is completed in Hive (fallback check): ${data.toString()}');
               }
             },
             loading: () {
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const OnboardingScreen()),
-                (route) => false,
-              );
+              Logger.d('EmailSigninScreen', 'Onboarding data is still loading from Hive');
             },
             error: (error, stack) {
+              Logger.d('EmailSigninScreen', 'Error loading onboarding data from Hive: $error');
+            },
+          );
+
+          if (onboardingCompletedInHive && mounted) {
+            // If onboarding is completed in Hive, navigate to home screen
+            if (context.mounted) {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const AuthenticatedHomeScreen()),
+                (route) => false,
+              );
+            }
+          } else if (mounted) {
+            // If not completed or error, navigate to onboarding screen
+            if (context.mounted) {
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (context) => const OnboardingScreen()),
                 (route) => false,
               );
-            },
-          );
+            }
+          }
         }
       }
     } catch (e) {

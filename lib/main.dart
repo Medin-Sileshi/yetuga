@@ -9,11 +9,19 @@ import 'firebase_options.dart';
 import 'models/onboarding_data.dart';
 import 'models/onboarding_cache.dart';
 import 'screens/auth/auth_screen.dart';
-import 'screens/home_screen.dart';
+import 'screens/authenticated_home_screen.dart';
 import 'screens/onboarding/onboarding_screen.dart';
 import 'providers/theme_provider.dart';
+import 'services/firestore_config_service.dart';
+import 'services/sync_service.dart';
 import 'services/user_cache_service.dart';
 import 'services/push_notification_service.dart';
+import 'services/cache_manager.dart';
+import 'services/prefetch_service.dart';
+import 'services/retry_service.dart';
+import 'services/event_cache_service.dart';
+import 'services/global_navigation_service.dart';
+import 'services/user_search_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/logger.dart';
 
@@ -29,6 +37,10 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Initialize Firestore with persistence
+  final firestoreConfigService = FirestoreConfigService();
+  await firestoreConfigService.initializeFirestore();
 
   // Initialize Hive
   await Hive.initFlutter();
@@ -61,11 +73,75 @@ void main() async {
     final pushNotificationService = PushNotificationService();
     await pushNotificationService.initialize();
     Logger.d('Main', 'Push notification service initialized');
+
+    // Initialize the cache manager
+    final container = ProviderContainer();
+    final cacheManager = container.read(cacheManagerProvider);
+    await cacheManager.initialize();
+    Logger.d('Main', 'Cache manager initialized');
+
+    // Initialize the retry service
+    final retryService = container.read(retryServiceProvider);
+    Logger.d('Main', 'Retry service initialized');
+
+    // Initialize the sync service
+    final syncService = container.read(syncServiceProvider);
+    await syncService.initialize();
+    Logger.d('Main', 'Sync service initialized');
+
+    // Initialize the prefetch service
+    final prefetchService = container.read(prefetchServiceProvider);
+    await prefetchService.initialize();
+    Logger.d('Main', 'Prefetch service initialized');
+
+    // Run a simple test to verify services are working
+    _runSimpleServiceTest(cacheManager, retryService, prefetchService);
   } catch (e) {
     Logger.d('Main', 'Error opening Hive boxes or initializing cache service: $e');
   }
 
   runApp(const ProviderScope(child: MyApp()));
+}
+
+// Simple test function to verify that our services are working
+Future<void> _runSimpleServiceTest(
+    CacheManager cacheManager,
+    RetryService retryService,
+    PrefetchService prefetchService) async {
+  try {
+    Logger.d('ServiceTest', 'Running simple service test...');
+
+    // Test CacheManager
+    await cacheManager.put('test_key', 'test_value', priority: CacheManager.PRIORITY_HIGH);
+    final cachedValue = await cacheManager.get<String>('test_key');
+    Logger.d('ServiceTest', 'CacheManager test: ${cachedValue == 'test_value' ? 'PASSED' : 'FAILED'}');
+
+    // Test RetryService
+    try {
+      final result = await retryService.executeWithRetryAndFallback<String>(
+        operation: () async {
+          // This operation should succeed immediately
+          return 'success';
+        },
+        fallbackValue: 'fallback',
+        maxRetries: 3,
+        operationName: 'testOperation',
+      );
+      Logger.d('ServiceTest', 'RetryService test: ${result == 'success' ? 'PASSED' : 'FAILED'}');
+    } catch (e) {
+      Logger.e('ServiceTest', 'RetryService test failed', e);
+    }
+
+    // Test PrefetchService
+    await prefetchService.trackEventView('test_event_id');
+    await prefetchService.trackUserInteraction('test_user_id');
+    final status = prefetchService.getPrefetchStatus();
+    Logger.d('ServiceTest', 'PrefetchService test: ${status['trackedEvents'] > 0 ? 'PASSED' : 'FAILED'}');
+
+    Logger.d('ServiceTest', 'Service tests completed');
+  } catch (e) {
+    Logger.e('ServiceTest', 'Error running service tests', e);
+  }
 }
 
 class MyApp extends ConsumerStatefulWidget {
@@ -187,6 +263,7 @@ class _MyAppState extends ConsumerState<MyApp> {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
+      navigatorKey: GlobalNavigationService.navigatorKey,
       home: _buildHomeScreen(),
     );
   }
@@ -344,7 +421,7 @@ class _MyAppState extends ConsumerState<MyApp> {
 
     if (onboardingData != null && onboardingData.onboardingCompleted) {
       Logger.d('Main', 'Onboarding is completed in Hive, showing home screen');
-      return const HomeScreen();
+      return const AuthenticatedHomeScreen();
     } else {
       Logger.d('Main', 'Onboarding is not completed in Hive, showing onboarding screen');
       return const OnboardingScreen();

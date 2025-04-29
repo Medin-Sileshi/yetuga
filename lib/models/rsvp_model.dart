@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class EventInvitationModel {
+class RSVPModel {
   final String id;
   final String eventId;
   final String inviterId; // User who sent the invitation
@@ -9,7 +9,7 @@ class EventInvitationModel {
   final DateTime createdAt;
   final DateTime? respondedAt;
 
-  EventInvitationModel({
+  RSVPModel({
     this.id = '',
     required this.eventId,
     required this.inviterId,
@@ -36,8 +36,8 @@ class EventInvitationModel {
     return map;
   }
 
-  // Create an EventInvitationModel from a Firestore document
-  factory EventInvitationModel.fromFirestore(DocumentSnapshot doc) {
+  // Create an RSVPModel from a Firestore document
+  factory RSVPModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final Timestamp createdTimestamp = data['createdAt'] as Timestamp;
     
@@ -46,7 +46,7 @@ class EventInvitationModel {
       respondedAt = (data['respondedAt'] as Timestamp).toDate();
     }
 
-    return EventInvitationModel(
+    return RSVPModel(
       id: doc.id,
       eventId: data['eventId'] as String,
       inviterId: data['inviterId'] as String,
@@ -57,8 +57,8 @@ class EventInvitationModel {
     );
   }
 
-  // Create a copy of the invitation with updated fields
-  EventInvitationModel copyWith({
+  // Create a copy of the RSVP with updated fields
+  RSVPModel copyWith({
     String? id,
     String? eventId,
     String? inviterId,
@@ -67,7 +67,7 @@ class EventInvitationModel {
     DateTime? createdAt,
     DateTime? respondedAt,
   }) {
-    return EventInvitationModel(
+    return RSVPModel(
       id: id ?? this.id,
       eventId: eventId ?? this.eventId,
       inviterId: inviterId ?? this.inviterId,

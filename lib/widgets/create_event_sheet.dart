@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/event_model.dart';
 import '../services/event_service.dart';
 import '../services/follow_service.dart';
-import '../services/invitation_service.dart';
+import '../services/batch_service.dart';
+import '../services/rsvp_service.dart';
 import '../utils/logger.dart';
 import 'invite_followers_dialog.dart';
 
@@ -686,7 +688,7 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
                     );
 
                     Logger.d('CreateEventSheet', 'Event model created: ${event.toMap()}');
-                    Logger.d('CreateEventSheet', 'isPrivate value: ${_isPrivate}');
+                    Logger.d('CreateEventSheet', 'isPrivate value: $_isPrivate');
 
                     // Get the event service
                     final eventService = ref.read(eventServiceProvider);
@@ -698,17 +700,50 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
 
                     // For private events, we've already shown the invite dialog and collected invitees
                     // So we just need to send the invitations now
+                    Logger.d('CreateEventSheet', 'Checking if we need to send invitations: isPrivate=$_isPrivate, selectedInvitees=${_selectedInvitees?.length ?? 0}');
+                    if (_selectedInvitees != null) {
+                      Logger.d('CreateEventSheet', 'Selected invitees: $_selectedInvitees');
+                    }
                     if (_isPrivate && _selectedInvitees != null && _selectedInvitees!.isNotEmpty) {
-                      Logger.d('CreateEventSheet', 'Sending invitations to ${_selectedInvitees!.length} users for new event');
+                      Logger.d('CreateEventSheet', 'Sending invitations to ${_selectedInvitees!.length} users for new event with ID: $eventId');
 
-                      final invitationService = ref.read(invitationServiceProvider);
+                      // We'll use the BatchService to create invitations in batch
+                      try {
+                        // Get the batch service
+                        final batchService = ref.read(batchServiceProvider);
 
-                      // Send invitations to all selected users
-                      for (final userId in _selectedInvitees!) {
-                        await invitationService.sendInvitation(eventId, userId);
+                        // Log the current user ID
+                        final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+                        Logger.d('CreateEventSheet', 'Current user ID: $currentUserId');
+
+                        // Create invitations in batch
+                        Logger.d('CreateEventSheet', 'Creating invitations in batch for ${_selectedInvitees!.length} users: ${_selectedInvitees!}');
+                        // Make sure we're passing a List<String>
+                        final inviteeIds = _selectedInvitees!.map((id) => id.toString()).toList();
+                        Logger.d('CreateEventSheet', 'Invitee IDs type: ${inviteeIds.runtimeType}, value: $inviteeIds');
+                        await batchService.createInvitationsInBatch(eventId, inviteeIds, currentUserId!);
+                        Logger.d('CreateEventSheet', 'Successfully created invitations in batch');
+
+                        // Double-check with a query
+                        final firestore = FirebaseFirestore.instance;
+                        final rsvpQuery = await firestore.collection('rsvp')
+                            .where('eventId', isEqualTo: eventId)
+                            .where('inviterId', isEqualTo: currentUserId)
+                            .get();
+
+                        Logger.d('CreateEventSheet', 'Found ${rsvpQuery.docs.length} RSVPs for event: $eventId');
+
+                        // Check if the event was updated with joinedBy
+                        final eventDoc = await firestore.collection('events').doc(eventId).get();
+                        if (eventDoc.exists) {
+                          final eventData = eventDoc.data();
+                          final joinedBy = eventData?['joinedBy'] ?? [];
+                          Logger.d('CreateEventSheet', 'Event joinedBy: $joinedBy');
+                        }
+                      } catch (e) {
+                        Logger.e('CreateEventSheet', 'Error creating invitations', e);
+                        // Continue even if there's an error creating invitations
                       }
-
-                      Logger.d('CreateEventSheet', 'Invitations sent successfully');
                     }
 
                     // Close the sheet if still mounted
@@ -790,22 +825,9 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
     });
   }
 
-  // Helper method to show the invite dialog for an existing event
-  void _showInviteDialog(BuildContext context, String eventId) {
-    Logger.d('CreateEventSheet', 'Inside _showInviteDialog for eventId: $eventId');
-
-    // Show the dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false, // Prevent dismissing by tapping outside
-      builder: (dialogContext) => InviteFollowersDialog(eventId: eventId),
-    ).then((value) {
-      Logger.d('CreateEventSheet', 'Invite dialog closed with result: $value');
-    });
-  }
-
   // Helper method to show the invite dialog before creating an event
   Future<List<String>?> _showPreCreationInviteDialog() async {
+    Logger.d('CreateEventSheet', '_showPreCreationInviteDialog called');
     Logger.d('CreateEventSheet', 'Showing pre-creation invite dialog');
 
     // Show the dialog and wait for the result
@@ -819,22 +841,37 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
       ),
     );
 
-    Logger.d('CreateEventSheet', 'Pre-creation invite dialog closed with result: $result');
+    Logger.d('CreateEventSheet', 'Pre-creation invite dialog closed with result type: ${result.runtimeType}, value: $result');
 
     // If the dialog was cancelled or returned false, return null
     if (result == null || result == false) {
+      Logger.d('CreateEventSheet', 'Dialog was cancelled or returned false');
       return null;
     }
 
     // Get the selected invitees from the dialog
     if (result is List<String>) {
+      Logger.d('CreateEventSheet', 'Dialog returned a list of ${result.length} user IDs');
       return result;
+    } else if (result is List) {
+      // Try to convert the list to a list of strings
+      Logger.d('CreateEventSheet', 'Dialog returned a list of type ${result.runtimeType}');
+      try {
+        final stringList = result.map((item) => item.toString()).toList();
+        Logger.d('CreateEventSheet', 'Converted to a list of ${stringList.length} strings');
+        return stringList;
+      } catch (e) {
+        Logger.e('CreateEventSheet', 'Error converting result to List<String>', e);
+        return [];
+      }
     } else if (result == true) {
       // Dialog was completed but we don't have the invitees list
       // This shouldn't happen with the new implementation, but handle it just in case
+      Logger.d('CreateEventSheet', 'Dialog returned true but no invitees list');
       return [];
     }
 
+    Logger.d('CreateEventSheet', 'Dialog returned an unexpected result type');
     return null;
   }
 

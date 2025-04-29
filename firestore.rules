@@ -179,8 +179,16 @@ service cloud.firestore {
          (request.query.filters[0].fieldPath == 'eventId'));
 
       // Allow creating notifications
+      // Modified to allow all notification types for authenticated users
       allow create: if isAuthenticated() &&
-        request.resource.data.senderId == request.auth.uid;
+        (
+          // Either the sender is the current user
+          request.resource.data.senderId == request.auth.uid ||
+          // Or it's a notification for joining an event (for invited users)
+          request.resource.data.type == 'joinAccepted' ||
+          // Or it's an event invitation
+          request.resource.data.type == 'eventInvitation'
+        );
 
       // Allow updating notifications addressed to the current user
       // or sent by the current user
@@ -191,6 +199,46 @@ service cloud.firestore {
       // Allow deleting notifications addressed to the current user
       allow delete: if isAuthenticated() &&
         resource.data.userId == request.auth.uid;
+    }
+
+    // Event Invitations collection has been replaced by RSVP collection
+
+    // RSVP collection
+    match /rsvp/{rsvpId} {
+      // Allow reading RSVPs where the user is the invitee or inviter
+      allow read: if isAuthenticated() &&
+        (resource.data.inviteeId == request.auth.uid || resource.data.inviterId == request.auth.uid);
+
+      // Allow listing RSVPs for the current user
+      allow list: if isAuthenticated() &&
+        request.query.limit <= 100 &&
+        ((request.query.filters[0].fieldPath == 'inviteeId' &&
+          request.query.filters[0].op == '==' &&
+          request.query.filters[0].value == request.auth.uid) ||
+         (request.query.filters[0].fieldPath == 'inviterId' &&
+          request.query.filters[0].op == '==' &&
+          request.query.filters[0].value == request.auth.uid));
+
+      // Allow creating RSVPs if the user is the inviter
+      allow create: if isAuthenticated() &&
+        request.resource.data.inviterId == request.auth.uid;
+
+      // Allow updating RSVPs if the user is the invitee (to accept/decline)
+      // or the inviter (to cancel)
+      allow update: if isAuthenticated() &&
+        (resource.data.inviteeId == request.auth.uid ||
+         resource.data.inviterId == request.auth.uid);
+
+      // Allow deleting RSVPs if the user is the inviter
+      allow delete: if isAuthenticated() &&
+        resource.data.inviterId == request.auth.uid;
+    }
+
+    // Backward compatibility rules for event_invitations have been removed
+
+    // System collection for online status checks
+    match /system/{document} {
+      allow read: if isAuthenticated();
     }
 
     // Default deny

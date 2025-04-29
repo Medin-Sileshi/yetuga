@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/theme_provider.dart';
+import '../test/test_menu_screen.dart';
 
 class ThemeSettingsScreen extends ConsumerWidget {
   const ThemeSettingsScreen({super.key});
@@ -75,6 +76,32 @@ class ThemeSettingsScreen extends ConsumerWidget {
                 fontSize: 14,
                 fontStyle: FontStyle.italic,
               ),
+            ),
+
+            const SizedBox(height: 32),
+            const Divider(),
+            const SizedBox(height: 16),
+
+            // Developer options section
+            const Text(
+              'Developer Options',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              title: const Text('Optimization Tests'),
+              subtitle: const Text('Test caching, prefetching, and retry mechanisms'),
+              leading: const Icon(Icons.developer_mode),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const TestMenuScreen()),
+                );
+              },
             ),
           ],
         ),
