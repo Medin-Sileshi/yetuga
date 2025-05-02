@@ -19,9 +19,7 @@ import 'services/push_notification_service.dart';
 import 'services/cache_manager.dart';
 import 'services/prefetch_service.dart';
 import 'services/retry_service.dart';
-import 'services/event_cache_service.dart';
 import 'services/global_navigation_service.dart';
-import 'services/user_search_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/logger.dart';
 
@@ -112,7 +110,7 @@ Future<void> _runSimpleServiceTest(
     Logger.d('ServiceTest', 'Running simple service test...');
 
     // Test CacheManager
-    await cacheManager.put('test_key', 'test_value', priority: CacheManager.PRIORITY_HIGH);
+    await cacheManager.put('test_key', 'test_value', priority: CacheManager.priorityHigh);
     final cachedValue = await cacheManager.get<String>('test_key');
     Logger.d('ServiceTest', 'CacheManager test: ${cachedValue == 'test_value' ? 'PASSED' : 'FAILED'}');
 

@@ -105,23 +105,20 @@ class _InterestsStepState extends ConsumerState<InterestsStep> {
                 final isSelected = _selectedInterests.contains(interest);
                 return GestureDetector(
                   onTap: () => _toggleInterest(interest),
-                  child: Container(
-                    
-                    child: Center(
-                      child: Text(
-                        interest,
-                        style: TextStyle(
-                          color: isSelected
-                              ? colorScheme.primary
-                              : colorScheme.onSurface.withAlpha(179), // 0.7 opacity
-                          fontWeight:
-                              isSelected ? FontWeight.bold : FontWeight.normal,
-                          fontSize: 16, // Increased font size
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                  child: Center(
+                    child: Text(
+                      interest,
+                      style: TextStyle(
+                        color: isSelected
+                            ? colorScheme.primary
+                            : colorScheme.onSurface.withAlpha(179), // 0.7 opacity
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
+                        fontSize: 16, // Increased font size
                       ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 );

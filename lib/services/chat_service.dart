@@ -40,7 +40,7 @@ class ChatService {
 
       // Get the current user's display name
       final userDoc = await _firestore.collection('users').doc(_currentUserId).get();
-      final userData = userDoc.data() as Map<String, dynamic>?;
+      final userData = userDoc.data();
       final displayName = userData?['displayName'] ?? 'Anonymous';
 
       // First check if the user can access this event

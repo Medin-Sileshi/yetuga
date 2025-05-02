@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/prefetch_service.dart';
 import '../../services/event_cache_service.dart';
 import '../../utils/logger.dart';

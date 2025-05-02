@@ -77,8 +77,8 @@ class RSVPService {
 
       // Get inviter's display name
       final userDoc = await _firestore.collection('users').doc(_currentUserId).get();
-      final userData = userDoc.data() as Map<String, dynamic>?;
-      final displayName = userData?['displayName'] as String? ?? 'Someone';
+      final userData = userDoc.data();
+      final displayName = userData?['displayName'] ?? 'Someone';
 
       // Create a notification for the invitee
       final notification = NotificationModel(
@@ -178,8 +178,8 @@ class RSVPService {
       try {
         // Get the current user's display name
         final userDoc = await _firestore.collection('users').doc(_currentUserId).get();
-        final userData = userDoc.data() as Map<String, dynamic>?;
-        final displayName = userData?['displayName'] as String? ?? 'Someone';
+        final userData = userDoc.data();
+        final displayName = userData?['displayName'] ?? 'Someone';
 
         // Get event details
         final eventDoc = await _eventsCollection.doc(rsvp.eventId).get();
@@ -250,8 +250,8 @@ class RSVPService {
       try {
         // Get the current user's display name
         final userDoc = await _firestore.collection('users').doc(_currentUserId).get();
-        final userData = userDoc.data() as Map<String, dynamic>?;
-        final displayName = userData?['displayName'] as String? ?? 'Someone';
+        final userData = userDoc.data();
+        final displayName = userData?['displayName'] ?? 'Someone';
 
         // Get event details
         final eventDoc = await _eventsCollection.doc(rsvp.eventId).get();

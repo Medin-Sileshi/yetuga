@@ -214,7 +214,7 @@ class PrefetchService {
             await _cacheManager.put(
               'event_$eventId',
               event,
-              priority: CacheManager.PRIORITY_HIGH,
+              priority: CacheManager.priorityHigh,
             );
 
             // Also update the event cache service
@@ -268,7 +268,7 @@ class PrefetchService {
               await _cacheManager.put(
                 'user_$userId',
                 userData,
-                priority: CacheManager.PRIORITY_MEDIUM,
+                priority: CacheManager.priorityMedium,
               );
             }
           }
@@ -308,7 +308,7 @@ class PrefetchService {
           await _cacheManager.put(
             'event_${event.id}',
             event,
-            priority: CacheManager.PRIORITY_HIGH,
+            priority: CacheManager.priorityHigh,
           );
 
           // Also update the event cache service

@@ -15,7 +15,6 @@ import '../services/event_cache_service.dart';
 import '../services/event_service.dart';
 import '../services/rsvp_service.dart';
 import '../services/notification_service.dart';
-import '../services/user_cache_service.dart';
 import '../utils/logger.dart';
 
 import '../widgets/create_event_sheet.dart';

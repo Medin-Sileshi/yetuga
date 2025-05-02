@@ -93,7 +93,7 @@ class TestMenuScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withAlpha(26), // 0.1 opacity (26/255)
                   shape: BoxShape.circle,
                 ),
                 child: Icon(

@@ -100,20 +100,56 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
         return;
       }
 
+      // Cancel any existing subscription first to prevent memory leaks
+      if (_eventSubscription != null) {
+        Logger.d('EventFeedCard', 'Cancelling previous subscription for event: $eventId');
+        _eventSubscription!.cancel();
+        _eventSubscription = null;
+      }
+
+      // Only subscribe if the widget is still mounted
+      if (!mounted) {
+        Logger.d('EventFeedCard', 'Widget not mounted, skipping subscription for event: $eventId');
+        return;
+      }
+
       final eventsCollection = FirebaseFirestore.instance.collection('events');
 
+      Logger.d('EventFeedCard', 'Setting up new subscription for event: $eventId');
       _eventSubscription = eventsCollection.doc(eventId).snapshots().listen(
         (snapshot) {
-          if (!mounted) return;
+          // Store the mounted state in a local variable to avoid race conditions
+          final isWidgetMounted = mounted;
+
+          if (!isWidgetMounted) {
+            Logger.d('EventFeedCard', 'Widget not mounted during snapshot update for event: $eventId');
+            return;
+          }
 
           try {
             if (snapshot.exists) {
               final updatedEvent = EventModel.fromFirestore(snapshot);
+
+              // Log privacy changes for debugging
+              if (_currentEvent.isPrivate != updatedEvent.isPrivate) {
+                Logger.d('EventFeedCard', 'Privacy changed for event $eventId: ${_currentEvent.isPrivate} -> ${updatedEvent.isPrivate}');
+              }
+
               // Only update if there are actual changes to the event
               if (_hasRelevantChanges(_currentEvent, updatedEvent)) {
-                setState(() {
-                  _currentEvent = updatedEvent;
-                });
+                // Check mounted again right before setState to avoid race conditions
+                if (isWidgetMounted && mounted) {
+                  try {
+                    setState(() {
+                      _currentEvent = updatedEvent;
+                    });
+                    Logger.d('EventFeedCard', 'State updated successfully for event: $eventId');
+                  } catch (stateError) {
+                    Logger.e('EventFeedCard', 'Error updating state: $stateError');
+                  }
+                } else {
+                  Logger.d('EventFeedCard', 'Widget no longer mounted, skipping setState for event: $eventId');
+                }
               }
             } else {
               Logger.d('EventFeedCard', 'Event document no longer exists: $eventId');
@@ -125,6 +161,9 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
         onError: (error) {
           Logger.e('EventFeedCard', 'Error in event subscription: $error');
         },
+        onDone: () {
+          Logger.d('EventFeedCard', 'Stream subscription closed for event: $eventId');
+        },
       );
     } catch (e) {
       Logger.e('EventFeedCard', 'Error setting up event subscription: $e');
@@ -135,13 +174,72 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
     // Only check fields that would affect the UI
     return oldEvent.likedBy.length != newEvent.likedBy.length ||
            oldEvent.joinedBy.length != newEvent.joinedBy.length ||
-           oldEvent.inquiry != newEvent.inquiry;
+           oldEvent.inquiry != newEvent.inquiry ||
+           oldEvent.isPrivate != newEvent.isPrivate;
+  }
+
+  @override
+  void didUpdateWidget(EventFeedCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // If the event ID has changed, we need to resubscribe
+    if (oldWidget.event.id != widget.event.id) {
+      Logger.d('EventFeedCard', 'Event ID changed, resubscribing to updates');
+
+      // Cancel the old subscription
+      _eventSubscription?.cancel();
+
+      // Update the current event
+      _currentEvent = widget.event;
+
+      // Subscribe to updates for the new event
+      _subscribeToEventUpdates();
+
+      // Check for pending requests for the new event
+      _checkPendingRequest();
+    }
+    // If the event has changed but the ID is the same, update our local copy
+    else if (oldWidget.event != widget.event) {
+      Logger.d('EventFeedCard', 'Event updated, updating local copy');
+
+      // Check if privacy changed
+      if (oldWidget.event.isPrivate != widget.event.isPrivate) {
+        Logger.d('EventFeedCard', 'Privacy changed: ${oldWidget.event.isPrivate} -> ${widget.event.isPrivate}');
+      }
+
+      // Update the current event if there are relevant changes
+      if (_hasRelevantChanges(_currentEvent, widget.event)) {
+        setState(() {
+          _currentEvent = widget.event;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
+    final eventId = widget.event.id;
+    Logger.d('EventFeedCard', 'Disposing EventFeedCard for event: $eventId');
+
     // Cancel the subscription when the widget is disposed
-    _eventSubscription?.cancel();
+    if (_eventSubscription != null) {
+      Logger.d('EventFeedCard', 'Cancelling subscription in dispose() for event: $eventId');
+      _eventSubscription!.cancel();
+      _eventSubscription = null;
+    }
+
+    // Clear any references that might cause memory leaks
+    _currentEvent = EventModel(
+      id: '',
+      userId: '',
+      activityType: '',
+      inquiry: '',
+      date: DateTime.now(),
+      time: const TimeOfDay(hour: 0, minute: 0),
+      isPrivate: false,
+    );
+
+    Logger.d('EventFeedCard', 'Dispose complete for event: $eventId');
     super.dispose();
   }
 
@@ -965,8 +1063,30 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                                 builder: (context) => EventManagementScreen(
                                   event: _currentEvent,
                                   onEventUpdated: (updatedEvent) {
-                                    setState(() {
-                                      _currentEvent = updatedEvent;
+                                    // Use a delayed callback to ensure we don't interfere with navigation
+                                    Future.microtask(() {
+                                      // Check if the widget is still mounted before updating state
+                                      if (!mounted) {
+                                        Logger.d('EventFeedCard', 'Widget not mounted in microtask, ignoring update callback');
+                                        return;
+                                      }
+
+                                      try {
+                                        // Log privacy changes for debugging
+                                        if (_currentEvent.isPrivate != updatedEvent.isPrivate) {
+                                          Logger.d('EventFeedCard', 'Privacy changed via callback: ${_currentEvent.isPrivate} -> ${updatedEvent.isPrivate}');
+                                        }
+
+                                        // Check mounted again right before setState
+                                        if (mounted) {
+                                          setState(() {
+                                            _currentEvent = updatedEvent;
+                                          });
+                                          Logger.d('EventFeedCard', 'State updated via callback for event: ${updatedEvent.id}');
+                                        }
+                                      } catch (e) {
+                                        Logger.e('EventFeedCard', 'Error updating state in callback: $e');
+                                      }
                                     });
                                   },
                                   onEventDeleted: () {

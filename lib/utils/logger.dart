@@ -23,28 +23,28 @@ class Logger {
 
   static void d(String tag, String message) {
     if (kDebugMode && _debugLogsEnabled) {
-      print('DEBUG: [${_truncateMessage(tag)}] ${_truncateMessage(message)}');
+      debugPrint('DEBUG: [${_truncateMessage(tag)}] ${_truncateMessage(message)}');
     }
   }
 
   static void i(String tag, String message) {
     if (kDebugMode) {
-      print('INFO: [${_truncateMessage(tag)}] ${_truncateMessage(message)}');
+      debugPrint('INFO: [${_truncateMessage(tag)}] ${_truncateMessage(message)}');
     }
   }
 
   static void w(String tag, String message) {
     if (kDebugMode) {
-      print('WARN: [${_truncateMessage(tag)}] ${_truncateMessage(message)}');
+      debugPrint('WARN: [${_truncateMessage(tag)}] ${_truncateMessage(message)}');
     }
   }
 
   static void e(String tag, String message, [dynamic error]) {
     if (kDebugMode) {
       if (error != null) {
-        print('ERROR: [${_truncateMessage(tag)}] ${_truncateMessage(message)} - $error');
+        debugPrint('ERROR: [${_truncateMessage(tag)}] ${_truncateMessage(message)} - $error');
       } else {
-        print('ERROR: [${_truncateMessage(tag)}] ${_truncateMessage(message)}');
+        debugPrint('ERROR: [${_truncateMessage(tag)}] ${_truncateMessage(message)}');
       }
     }
   }

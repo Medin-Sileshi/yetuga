@@ -21,7 +21,7 @@ class InviteFollowersDialog extends ConsumerStatefulWidget {
 
 class _InviteFollowersDialogState extends ConsumerState<InviteFollowersDialog> {
   List<Map<String, dynamic>> _following = [];
-  List<String> _selectedUserIds = [];
+  final List<String> _selectedUserIds = [];
   bool _isLoading = true;
   String? _errorMessage;
   bool _isSending = false;

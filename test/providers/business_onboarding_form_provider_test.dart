@@ -1,7 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yetuga/providers/business_onboarding_form_provider.dart';
-import 'package:yetuga/models/business_onboarding_data.dart';
 
 void main() {
   group('BusinessOnboardingFormProvider Tests', () {
@@ -26,7 +24,7 @@ void main() {
     test('setAccountType should update state', () {
       // Act
       notifier.setAccountType('business');
-      
+
       // Assert
       expect(notifier.state.accountType, equals('business'));
     });
@@ -34,7 +32,7 @@ void main() {
     test('setBusinessName should update state', () {
       // Act
       notifier.setBusinessName('Acme Corp');
-      
+
       // Assert
       expect(notifier.state.businessName, equals('Acme Corp'));
     });
@@ -42,7 +40,7 @@ void main() {
     test('setUsername should update state', () {
       // Act
       notifier.setUsername('acmecorp');
-      
+
       // Assert
       expect(notifier.state.username, equals('acmecorp'));
     });
@@ -50,10 +48,10 @@ void main() {
     test('setEstablishedDate should update state', () {
       // Arrange
       final date = DateTime(2010, 1, 1);
-      
+
       // Act
       notifier.setEstablishedDate(date);
-      
+
       // Assert
       expect(notifier.state.establishedDate, equals(date));
     });
@@ -61,7 +59,7 @@ void main() {
     test('setPhoneNumber should update state', () {
       // Act
       notifier.setPhoneNumber('+1234567890');
-      
+
       // Assert
       expect(notifier.state.phoneNumber, equals('+1234567890'));
     });
@@ -69,7 +67,7 @@ void main() {
     test('setProfileImage should update state', () {
       // Act
       notifier.setProfileImage('https://example.com/image.jpg');
-      
+
       // Assert
       expect(notifier.state.profileImageUrl, equals('https://example.com/image.jpg'));
     });
@@ -77,10 +75,10 @@ void main() {
     test('setBusinessTypes should update state', () {
       // Arrange
       final types = ['Retail', 'Technology', 'Services'];
-      
+
       // Act
       notifier.setBusinessTypes(types);
-      
+
       // Assert
       expect(notifier.state.businessTypes, equals(types));
     });
@@ -88,7 +86,7 @@ void main() {
     test('setOnboardingCompleted should update state', () {
       // Act
       notifier.setOnboardingCompleted(true);
-      
+
       // Assert
       expect(notifier.state.onboardingCompleted, isTrue);
     });
@@ -97,10 +95,10 @@ void main() {
       // Arrange - Set some values
       notifier.setAccountType('business');
       notifier.setBusinessName('Acme Corp');
-      
+
       // Act
       notifier.reset();
-      
+
       // Assert
       expect(notifier.state.accountType, isNull);
       expect(notifier.state.businessName, isNull);
@@ -115,7 +113,7 @@ void main() {
       notifier.setPhoneNumber('+1234567890');
       notifier.setProfileImage('https://example.com/image.jpg');
       notifier.setBusinessTypes(['Retail']);
-      
+
       // Assert
       expect(notifier.state.isComplete(), isTrue);
     });
@@ -129,7 +127,7 @@ void main() {
       notifier.setPhoneNumber('+1234567890');
       notifier.setProfileImage('https://example.com/image.jpg');
       notifier.setBusinessTypes(['Retail']);
-      
+
       // Assert
       expect(notifier.state.isComplete(), isFalse);
     });

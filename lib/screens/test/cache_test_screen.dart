@@ -39,7 +39,7 @@ class _CacheTestScreenState extends ConsumerState<CacheTestScreen> {
       await cacheManager.put(
         _keyController.text,
         _valueController.text,
-        priority: CacheManager.PRIORITY_HIGH,
+        priority: CacheManager.priorityHigh,
       );
       _showResult('Data stored successfully with key: ${_keyController.text}');
     } catch (e) {
@@ -65,7 +65,7 @@ class _CacheTestScreenState extends ConsumerState<CacheTestScreen> {
     try {
       final cacheManager = ref.read(cacheManagerProvider);
       final value = await cacheManager.get<String>(_keyController.text);
-      
+
       if (value != null) {
         _showResult('Retrieved value: $value');
         _valueController.text = value;

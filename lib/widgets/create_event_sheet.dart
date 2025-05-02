@@ -6,7 +6,6 @@ import '../models/event_model.dart';
 import '../services/event_service.dart';
 import '../services/follow_service.dart';
 import '../services/batch_service.dart';
-import '../services/rsvp_service.dart';
 import '../utils/logger.dart';
 import 'invite_followers_dialog.dart';
 

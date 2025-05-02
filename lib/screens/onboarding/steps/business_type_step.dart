@@ -90,23 +90,20 @@ class _BusinessTypeStepState extends ConsumerState<BusinessTypeStep> {
                 final isSelected = _selectedTypes.contains(type);
                 return GestureDetector(
                   onTap: () => _toggleType(type),
-                  child: Container(
-                    
-                    child: Center(
-                      child: Text(
-                        type,
-                        style: TextStyle(
-                          color: isSelected
-                              ? colorScheme.primary
-                              : colorScheme.onSurface.withAlpha(179), // 0.7 opacity
-                          fontWeight:
-                              isSelected ? FontWeight.bold : FontWeight.normal,
-                          fontSize: 16, // Increased font size
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                  child: Center(
+                    child: Text(
+                      type,
+                      style: TextStyle(
+                        color: isSelected
+                            ? colorScheme.primary
+                            : colorScheme.onSurface.withAlpha(179), // 0.7 opacity
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
+                        fontSize: 16, // Increased font size
                       ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 );

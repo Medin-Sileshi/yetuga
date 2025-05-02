@@ -166,13 +166,13 @@ class _UserProfileDialogState extends ConsumerState<UserProfileDialog> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: theme.dialogBackgroundColor,
+          color: theme.colorScheme.surface, // Using surface instead of deprecated dialogBackgroundColor
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
+          boxShadow: const [
             BoxShadow(
               color: Colors.black26,
               blurRadius: 10.0,
-              offset: const Offset(0.0, 10.0),
+              offset: Offset(0.0, 10.0),
             ),
           ],
         ),
@@ -227,7 +227,7 @@ class _UserProfileDialogState extends ConsumerState<UserProfileDialog> {
                   Text(
                     '@$_username',
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: textColor.withOpacity(0.7),
+                      color: textColor.withAlpha(179), // 0.7 opacity (179/255)
                     ),
                     textAlign: TextAlign.center,
                   ),

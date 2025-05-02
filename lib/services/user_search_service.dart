@@ -49,57 +49,57 @@ class UserSearchService {
   Future<List<UserModel>> searchUsers(String query) async {
     try {
       Logger.d('UserSearchService', 'Searching users with query: "$query"');
-      
+
       if (query.isEmpty) {
         return [];
       }
 
       // Normalize the query
       final normalizedQuery = query.toLowerCase().trim();
-      
+
       // Get users where displayName or username contains the query
       // Firestore doesn't support direct contains queries, so we'll use startAt and endAt
       // with the query and query + '\uf8ff' (high code point) to simulate a "starts with" query
-      
+
       // First, search by displayName
       final displayNameQuery = _firestore.collection('users')
           .orderBy('displayName')
           .startAt([normalizedQuery])
-          .endAt([normalizedQuery + '\uf8ff'])
+          .endAt(['$normalizedQuery\uf8ff'])
           .limit(20);
-          
+
       // Then, search by username
       final usernameQuery = _firestore.collection('users')
           .orderBy('username')
           .startAt([normalizedQuery])
-          .endAt([normalizedQuery + '\uf8ff'])
+          .endAt(['$normalizedQuery\uf8ff'])
           .limit(20);
-      
+
       // Execute both queries
       final displayNameSnapshot = await displayNameQuery.get();
       final usernameSnapshot = await usernameQuery.get();
-      
+
       // Combine results, avoiding duplicates
       final Map<String, UserModel> userMap = {};
-      
+
       // Process displayName results
       for (final doc in displayNameSnapshot.docs) {
         userMap[doc.id] = UserModel.fromFirestore(doc);
       }
-      
+
       // Process username results
       for (final doc in usernameSnapshot.docs) {
         if (!userMap.containsKey(doc.id)) {
           userMap[doc.id] = UserModel.fromFirestore(doc);
         }
       }
-      
+
       // Convert to list
       final users = userMap.values.toList();
-      
+
       // If the current user is in the results, remove them
       users.removeWhere((user) => user.id == _currentUserId);
-      
+
       // Check which users the current user is following
       if (_currentUserId.isNotEmpty && users.isNotEmpty) {
         final followingSnapshot = await _firestore
@@ -107,9 +107,9 @@ class UserSearchService {
             .doc(_currentUserId)
             .collection('following')
             .get();
-        
+
         final followingIds = followingSnapshot.docs.map((doc) => doc.id).toSet();
-        
+
         // Update isFollowing status
         for (int i = 0; i < users.length; i++) {
           final user = users[i];
@@ -125,29 +125,29 @@ class UserSearchService {
           }
         }
       }
-      
+
       // Sort results by relevance
       users.sort((a, b) {
         // First, prioritize exact matches
-        final aExactMatch = a.displayName.toLowerCase() == normalizedQuery || 
+        final aExactMatch = a.displayName.toLowerCase() == normalizedQuery ||
                            a.username.toLowerCase() == normalizedQuery;
-        final bExactMatch = b.displayName.toLowerCase() == normalizedQuery || 
+        final bExactMatch = b.displayName.toLowerCase() == normalizedQuery ||
                            b.username.toLowerCase() == normalizedQuery;
-        
+
         if (aExactMatch && !bExactMatch) return -1;
         if (!aExactMatch && bExactMatch) return 1;
-        
+
         // Then, prioritize business accounts
         final aIsBusiness = a.accountType == 'business';
         final bIsBusiness = b.accountType == 'business';
-        
+
         if (aIsBusiness && !bIsBusiness) return -1;
         if (!aIsBusiness && bIsBusiness) return 1;
-        
+
         // Finally, sort alphabetically by display name
         return a.displayName.compareTo(b.displayName);
       });
-      
+
       Logger.d('UserSearchService', 'Search returned ${users.length} users');
       return users;
     } catch (e) {
@@ -155,18 +155,18 @@ class UserSearchService {
       return [];
     }
   }
-  
+
   // Follow a user
   Future<bool> followUser(String userId) async {
     try {
       if (_currentUserId.isEmpty) {
         throw Exception('User not authenticated');
       }
-      
+
       if (_currentUserId == userId) {
         throw Exception('Cannot follow yourself');
       }
-      
+
       // Add to following collection
       await _firestore
           .collection('users')
@@ -176,7 +176,7 @@ class UserSearchService {
           .set({
         'timestamp': FieldValue.serverTimestamp(),
       });
-      
+
       // Add to followers collection
       await _firestore
           .collection('users')
@@ -186,21 +186,21 @@ class UserSearchService {
           .set({
         'timestamp': FieldValue.serverTimestamp(),
       });
-      
+
       return true;
     } catch (e) {
       Logger.e('UserSearchService', 'Error following user', e);
       return false;
     }
   }
-  
+
   // Unfollow a user
   Future<bool> unfollowUser(String userId) async {
     try {
       if (_currentUserId.isEmpty) {
         throw Exception('User not authenticated');
       }
-      
+
       // Remove from following collection
       await _firestore
           .collection('users')
@@ -208,7 +208,7 @@ class UserSearchService {
           .collection('following')
           .doc(userId)
           .delete();
-      
+
       // Remove from followers collection
       await _firestore
           .collection('users')
@@ -216,7 +216,7 @@ class UserSearchService {
           .collection('followers')
           .doc(_currentUserId)
           .delete();
-      
+
       return true;
     } catch (e) {
       Logger.e('UserSearchService', 'Error unfollowing user', e);

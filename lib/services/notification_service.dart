@@ -51,7 +51,7 @@ class NotificationService {
 
         // Get the user's display name
         final userDoc = await _firestore.collection('users').doc(_currentUserId).get();
-        final userData = userDoc.data() as Map<String, dynamic>?;
+        final userData = userDoc.data();
         final displayName = userData?['displayName'] ?? 'Someone';
 
         // Create a notification for the event creator
@@ -120,7 +120,7 @@ class NotificationService {
       try {
         // Get the event creator's display name
         final userDoc = await _firestore.collection('users').doc(_currentUserId).get();
-        final userData = userDoc.data() as Map<String, dynamic>?;
+        final userData = userDoc.data();
         final displayName = userData?['displayName'] ?? 'Someone';
 
         // Send push notification

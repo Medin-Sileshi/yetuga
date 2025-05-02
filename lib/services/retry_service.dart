@@ -28,19 +28,19 @@ final retryServiceProvider = Provider<RetryService>((ref) => RetryService());
 /// and other potentially unreliable operations that may fail transiently.
 class RetryService {
   /// Default maximum number of retry attempts
-  static const int DEFAULT_MAX_RETRIES = 3;
+  static const int defaultMaxRetries = 3;
 
   /// Default initial delay before the first retry (500ms)
-  static const Duration DEFAULT_INITIAL_DELAY = Duration(milliseconds: 500);
+  static const Duration defaultInitialDelay = Duration(milliseconds: 500);
 
   /// Default multiplier for exponential backoff (each retry waits 1.5x longer)
-  static const double DEFAULT_BACKOFF_FACTOR = 1.5;
+  static const double defaultBackoffFactor = 1.5;
 
   /// Default maximum delay between retries (30 seconds)
-  static const Duration DEFAULT_MAX_DELAY = Duration(seconds: 30);
+  static const Duration defaultMaxDelay = Duration(seconds: 30);
 
   /// Default timeout for each operation attempt (15 seconds)
-  static const Duration DEFAULT_TIMEOUT = Duration(seconds: 15);
+  static const Duration defaultTimeout = Duration(seconds: 15);
 
   /// Random number generator used to add jitter to retry delays
   /// to prevent multiple clients from retrying simultaneously
@@ -69,11 +69,11 @@ class RetryService {
   /// - The last exception encountered if all retry attempts fail
   Future<T> executeWithRetry<T>({
     required Future<T> Function() operation,
-    int maxRetries = DEFAULT_MAX_RETRIES,
-    Duration initialDelay = DEFAULT_INITIAL_DELAY,
-    double backoffFactor = DEFAULT_BACKOFF_FACTOR,
-    Duration maxDelay = DEFAULT_MAX_DELAY,
-    Duration timeout = DEFAULT_TIMEOUT,
+    int maxRetries = defaultMaxRetries,
+    Duration initialDelay = defaultInitialDelay,
+    double backoffFactor = defaultBackoffFactor,
+    Duration maxDelay = defaultMaxDelay,
+    Duration timeout = defaultTimeout,
     bool Function(Exception)? shouldRetry,
     String operationName = 'operation',
   }) async {
@@ -95,7 +95,7 @@ class RetryService {
         return result;
       } catch (e) {
         final isException = e is Exception;
-        final shouldRetryException = isException && (shouldRetry == null || shouldRetry(e as Exception));
+        final shouldRetryException = isException && (shouldRetry == null || shouldRetry(e));
 
         // Check if we should retry
         if (attempts >= maxRetries || !shouldRetryException) {
@@ -138,11 +138,11 @@ class RetryService {
   Future<T> executeWithRetryAndFallback<T>({
     required Future<T> Function() operation,
     required T fallbackValue,
-    int maxRetries = DEFAULT_MAX_RETRIES,
-    Duration initialDelay = DEFAULT_INITIAL_DELAY,
-    double backoffFactor = DEFAULT_BACKOFF_FACTOR,
-    Duration maxDelay = DEFAULT_MAX_DELAY,
-    Duration timeout = DEFAULT_TIMEOUT,
+    int maxRetries = defaultMaxRetries,
+    Duration initialDelay = defaultInitialDelay,
+    double backoffFactor = defaultBackoffFactor,
+    Duration maxDelay = defaultMaxDelay,
+    Duration timeout = defaultTimeout,
     bool Function(Exception)? shouldRetry,
     String operationName = 'operation',
   }) async {
@@ -228,11 +228,11 @@ class RetryService {
   /// - Exception if any operations still fail after all retry attempts
   Future<List<dynamic>> executeBatchWithRetry<T>({
     required List<Future<T> Function()> operations,
-    int maxRetries = DEFAULT_MAX_RETRIES,
-    Duration initialDelay = DEFAULT_INITIAL_DELAY,
-    double backoffFactor = DEFAULT_BACKOFF_FACTOR,
-    Duration maxDelay = DEFAULT_MAX_DELAY,
-    Duration timeout = DEFAULT_TIMEOUT,
+    int maxRetries = defaultMaxRetries,
+    Duration initialDelay = defaultInitialDelay,
+    double backoffFactor = defaultBackoffFactor,
+    Duration maxDelay = defaultMaxDelay,
+    Duration timeout = defaultTimeout,
     bool Function(Exception)? shouldRetry,
     String operationName = 'batch operation',
   }) async {

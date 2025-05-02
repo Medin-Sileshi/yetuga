@@ -682,8 +682,26 @@ class EventService {
     try {
       Logger.d('EventService', 'Updating event with ID: ${event.id}');
       Logger.d('EventService', 'Updated data: ${event.toMap()}');
-      await _eventsCollection.doc(event.id).update(event.toMap());
-      Logger.d('EventService', 'Event updated successfully');
+
+      // Use retry logic for the Firestore update
+      final success = await _retryService.executeWithRetry<bool>(
+        operation: () async {
+          await _eventsCollection.doc(event.id).update(event.toMap());
+          return true;
+        },
+        maxRetries: 3,
+        shouldRetry: _retryService.isFirestoreRetryableError,
+        operationName: 'updateEvent(${event.id})',
+      );
+
+      if (success) {
+        // Update the cache with the new event data
+        _eventCacheService.updateEvent(event);
+        Logger.d('EventService', 'Event updated successfully and cache updated');
+      } else {
+        Logger.e('EventService', 'Failed to update event after retries');
+        throw Exception('Failed to update event after retries');
+      }
     } catch (e) {
       Logger.e('EventService', 'Error updating event', e);
       rethrow;

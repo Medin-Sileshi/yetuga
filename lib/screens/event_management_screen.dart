@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../models/event_model.dart';
 import '../services/event_service.dart';
 import '../services/notification_service.dart';
@@ -189,6 +188,9 @@ class _EventManagementScreenState extends ConsumerState<EventManagementScreen> {
     });
 
     try {
+      // Check if privacy is changing
+      final privacyChanged = _isPrivate != widget.event.isPrivate;
+
       // Create updated event model
       final updatedEvent = widget.event.copyWith(
         inquiry: _inquiryController.text.trim(),
@@ -201,7 +203,20 @@ class _EventManagementScreenState extends ConsumerState<EventManagementScreen> {
 
       // Update the event in Firestore
       final eventService = ref.read(eventServiceProvider);
+
+      // Log the privacy change
+      if (privacyChanged) {
+        Logger.d('EventManagementScreen', 'Changing event privacy from ${widget.event.isPrivate} to $_isPrivate');
+      }
+
+      // Update the event
       await eventService.updateEvent(updatedEvent);
+
+      // If we're changing from private to public, wait a moment to let Firestore propagate the change
+      if (privacyChanged && widget.event.isPrivate && !_isPrivate) {
+        Logger.d('EventManagementScreen', 'Changed from private to public, waiting for Firestore to propagate');
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
 
       // Notify attendees about the update
       if (_hasSignificantChanges()) {
@@ -216,15 +231,33 @@ class _EventManagementScreenState extends ConsumerState<EventManagementScreen> {
         }
       }
 
-      // Call the callback
-      widget.onEventUpdated(updatedEvent);
+      // Wait for Firestore to propagate the change
+      // This helps prevent race conditions with stream listeners
+      Logger.d('EventManagementScreen', 'Waiting for Firestore to propagate changes');
+      await Future.delayed(const Duration(milliseconds: 300));
 
-      // Show success message
+      // Store the event locally to avoid any race conditions
+      final eventToUpdate = updatedEvent;
+
+      // Call the callback in a try-catch block
+      try {
+        Logger.d('EventManagementScreen', 'Calling onEventUpdated callback');
+        // Use a separate function to avoid any context issues
+        _safelyCallEventUpdatedCallback(eventToUpdate);
+      } catch (callbackError) {
+        Logger.e('EventManagementScreen', 'Error in onEventUpdated callback', callbackError);
+      }
+
+      // Show success message and navigate back
       if (mounted) {
+        // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Event updated successfully')),
         );
-        Navigator.of(context).pop();
+
+        // Wait a bit more before navigating back to ensure all updates are processed
+        // Use a separate method to handle navigation to avoid BuildContext issues
+        _navigateBackAfterDelay();
       }
     } catch (e) {
       Logger.e('EventManagementScreen', 'Error updating event', e);
@@ -242,12 +275,41 @@ class _EventManagementScreenState extends ConsumerState<EventManagementScreen> {
     }
   }
 
+  // Navigate back after a short delay
+  void _navigateBackAfterDelay() {
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    });
+  }
+
+  // Safely call the event updated callback
+  void _safelyCallEventUpdatedCallback(EventModel event) {
+    // Detach from the current execution context to avoid BuildContext issues
+    Future.microtask(() {
+      try {
+        widget.onEventUpdated(event);
+        Logger.d('EventManagementScreen', 'onEventUpdated callback completed successfully');
+      } catch (e) {
+        Logger.e('EventManagementScreen', 'Error in detached callback', e);
+      }
+    });
+  }
+
   bool _hasSignificantChanges() {
-    // Check if date, time, or location has changed
-    return _selectedDate != widget.event.date ||
-           _selectedTime != widget.event.time ||
-           _inquiryController.text != widget.event.inquiry ||
-           _isPrivate != widget.event.isPrivate;
+    // Check if date, time, inquiry, or privacy has changed
+    final dateChanged = _selectedDate != widget.event.date;
+    final timeChanged = _selectedTime != widget.event.time;
+    final inquiryChanged = _inquiryController.text != widget.event.inquiry;
+    final privacyChanged = _isPrivate != widget.event.isPrivate;
+
+    // Log changes for debugging
+    if (privacyChanged) {
+      Logger.d('EventManagementScreen', 'Privacy setting changed from ${widget.event.isPrivate} to $_isPrivate');
+    }
+
+    return dateChanged || timeChanged || inquiryChanged || privacyChanged;
   }
 
   Future<void> _deleteEvent() async {
@@ -569,8 +631,8 @@ class _EventManagementScreenState extends ConsumerState<EventManagementScreen> {
         _isLoading = false;
       });
 
-      // Call the callback
-      widget.onEventUpdated(updatedEvent);
+      // Call the callback safely
+      _safelyCallEventUpdatedCallback(updatedEvent);
 
       // Show success message
       if (mounted) {

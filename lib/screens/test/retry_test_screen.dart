@@ -32,7 +32,7 @@ class _RetryTestScreenState extends ConsumerState<RetryTestScreen> {
   Future<void> _testSingleRetry() async {
     final successRate = int.tryParse(_successRateController.text) ?? 50;
     final maxRetries = int.tryParse(_retriesController.text) ?? 3;
-    
+
     setState(() {
       _isLoading = true;
       _resultText = 'Testing single retry...';
@@ -41,20 +41,20 @@ class _RetryTestScreenState extends ConsumerState<RetryTestScreen> {
 
     try {
       final retryService = ref.read(retryServiceProvider);
-      
+
       final result = await retryService.executeWithRetry<String>(
         operation: () async {
           _addLogMessage('Attempting operation...');
-          
+
           // Simulate network delay
           await Future.delayed(Duration(milliseconds: int.tryParse(_delayController.text) ?? 500));
-          
+
           // Randomly succeed or fail based on success rate
           if (_random.nextInt(100) >= successRate) {
             _addLogMessage('Operation failed, will retry if attempts remain');
             throw Exception('Simulated network error');
           }
-          
+
           _addLogMessage('Operation succeeded!');
           return 'Operation completed successfully after ${DateTime.now().toIso8601String()}';
         },
@@ -63,7 +63,7 @@ class _RetryTestScreenState extends ConsumerState<RetryTestScreen> {
         shouldRetry: (e) => true, // Always retry
         operationName: 'testOperation',
       );
-      
+
       _showResult('Success: $result');
     } catch (e) {
       _showResult('All retries failed: $e');
@@ -77,7 +77,7 @@ class _RetryTestScreenState extends ConsumerState<RetryTestScreen> {
   Future<void> _testRetryWithFallback() async {
     final successRate = int.tryParse(_successRateController.text) ?? 50;
     final maxRetries = int.tryParse(_retriesController.text) ?? 3;
-    
+
     setState(() {
       _isLoading = true;
       _resultText = 'Testing retry with fallback...';
@@ -86,20 +86,20 @@ class _RetryTestScreenState extends ConsumerState<RetryTestScreen> {
 
     try {
       final retryService = ref.read(retryServiceProvider);
-      
+
       final result = await retryService.executeWithRetryAndFallback<String>(
         operation: () async {
           _addLogMessage('Attempting operation with fallback...');
-          
+
           // Simulate network delay
           await Future.delayed(Duration(milliseconds: int.tryParse(_delayController.text) ?? 500));
-          
+
           // Randomly succeed or fail based on success rate
           if (_random.nextInt(100) >= successRate) {
             _addLogMessage('Operation failed, will retry if attempts remain');
             throw Exception('Simulated network error');
           }
-          
+
           _addLogMessage('Operation succeeded!');
           return 'Operation completed successfully after ${DateTime.now().toIso8601String()}';
         },
@@ -109,7 +109,7 @@ class _RetryTestScreenState extends ConsumerState<RetryTestScreen> {
         shouldRetry: (e) => true, // Always retry
         operationName: 'testOperationWithFallback',
       );
-      
+
       _showResult('Result: $result');
     } catch (e) {
       _showResult('Unexpected error: $e');
@@ -123,8 +123,8 @@ class _RetryTestScreenState extends ConsumerState<RetryTestScreen> {
   Future<void> _testBatchRetry() async {
     final successRate = int.tryParse(_successRateController.text) ?? 50;
     final maxRetries = int.tryParse(_retriesController.text) ?? 3;
-    final numOperations = 5; // Number of operations in the batch
-    
+    const numOperations = 5; // Number of operations in the batch
+
     setState(() {
       _isLoading = true;
       _resultText = 'Testing batch retry...';
@@ -133,26 +133,26 @@ class _RetryTestScreenState extends ConsumerState<RetryTestScreen> {
 
     try {
       final retryService = ref.read(retryServiceProvider);
-      
+
       final operations = List.generate(numOperations, (index) {
         return () async {
           _addLogMessage('Attempting operation $index...');
-          
+
           // Simulate network delay
           await Future.delayed(Duration(milliseconds: int.tryParse(_delayController.text) ?? 500));
-          
+
           // Randomly succeed or fail based on success rate
           // Make the first operation always succeed for testing
           if (index != 0 && _random.nextInt(100) >= successRate) {
             _addLogMessage('Operation $index failed, will retry if attempts remain');
             throw Exception('Simulated network error for operation $index');
           }
-          
+
           _addLogMessage('Operation $index succeeded!');
           return 'Operation $index completed successfully after ${DateTime.now().toIso8601String()}';
         };
       });
-      
+
       final results = await retryService.executeBatchWithRetry<String>(
         operations: operations,
         maxRetries: maxRetries,
@@ -160,7 +160,7 @@ class _RetryTestScreenState extends ConsumerState<RetryTestScreen> {
         shouldRetry: (e) => true, // Always retry
         operationName: 'batchOperation',
       );
-      
+
       _showResult('Batch results: ${results.length} operations completed');
       for (int i = 0; i < results.length; i++) {
         _addLogMessage('Result $i: ${results[i] ?? "Failed"}');

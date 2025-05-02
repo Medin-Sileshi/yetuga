@@ -31,10 +31,6 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
     facing: CameraFacing.back,
   );
   bool _isGeneratingQr = false;
-  // Debug mode to show raw QR code data
-  bool _debugMode = false;
-  // Store the last scanned code for debugging
-  String? _lastScannedCode;
 
   @override
   void initState() {
@@ -61,11 +57,6 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
 
     for (final barcode in barcodes) {
       final String? code = barcode.rawValue;
-
-      // Store the last scanned code for debugging
-      setState(() {
-        _lastScannedCode = code;
-      });
 
       // Log the raw code value
       Logger.d('QrScannerScreen', 'Raw QR code value: $code');
@@ -256,68 +247,6 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
           borderLength: 30.0,
           borderWidth: 3.0,
           cutOutSize: 250.0,
-        ),
-
-        // Debug info overlay
-        if (_debugMode && _lastScannedCode != null)
-          Positioned(
-            top: 16,
-            left: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.black.withAlpha(200),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Last scanned code:',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _lastScannedCode!,
-                    style: const TextStyle(color: Colors.white),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-        // Debug mode toggle
-        Positioned(
-          top: 16,
-          right: 16,
-          child: GestureDetector(
-            onTap: () {
-              setState(() {
-                _debugMode = !_debugMode;
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Debug mode ${_debugMode ? 'enabled' : 'disabled'}'),
-                  duration: const Duration(seconds: 1),
-                ),
-              );
-            },
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: _debugMode ? Colors.green.withAlpha(200) : Colors.black.withAlpha(128),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.bug_report,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
-          ),
         ),
       ],
     );
