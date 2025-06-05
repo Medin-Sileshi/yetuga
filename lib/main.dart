@@ -1,11 +1,9 @@
-import 'dart:async'; // Required for StreamSubscription
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'firebase_options.dart';
 import 'models/onboarding_data.dart';
@@ -24,9 +22,6 @@ import 'services/retry_service.dart';
 import 'services/global_navigation_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/logger.dart';
-import 'services/firebase_service.dart';
-import 'services/hive_service.dart';
-import 'services/navigation_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -160,62 +155,100 @@ class _MyAppState extends ConsumerState<MyApp> {
   bool _isSyncing = false;
   bool _hasSyncedThisSession = false;
 
-  late StreamSubscription<ConnectivityResult> _connectivitySubscription;
-
   @override
   void initState() {
     super.initState();
-
     // Check auth and onboarding status after the widget is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAuthAndOnboardingStatus();
     });
   }
 
-  @override
-  void dispose() {
-    _connectivitySubscription.cancel();
-    super.dispose();
-  }
-
-  void _handleError(String message, [dynamic error]) {
-    Logger.d('Main', '$message: $error');
-    setState(() {
-      _isLoading = false;
-      _error = 'Something went wrong. Please try again later.';
-    });
-  }
-
-  // Refactored to use Riverpod state management
   Future<void> _checkAuthAndOnboardingStatus() async {
     try {
+      Logger.d('Main', 'Checking auth and onboarding status');
+      // Check if user is authenticated
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        setState(() {
-          _isLoading = false;
-        });
-        NavigationService().navigateToAuthScreen();
-        return;
-      }
 
-      final data = await FirebaseService().getUserData(user.uid);
-      if (data != null && data['onboardingCompleted'] == true) {
-        await HiveService().updateOnboardingData(user.uid, data);
+      if (user == null) {
+        Logger.d('Main', 'No user logged in');
+        // User is not authenticated, navigate to auth screen
         setState(() {
           _isLoading = false;
         });
-        NavigationService().navigateToHomeScreen();
       } else {
-        setState(() {
-          _isLoading = false;
-        });
-        NavigationService().navigateToOnboardingScreen();
+        Logger.d('Main', 'User is logged in: ${user.uid}');
+        // User is authenticated, check if onboarding is completed
+        try {
+          Logger.d('Main', 'Checking Firebase for onboarding status');
+          // Check Firebase directly
+          final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+
+          if (doc.exists) {
+            Logger.d('Main', 'User document exists in Firestore');
+            final data = doc.data();
+            Logger.d('Main', 'User data: $data');
+            if (data != null && data['onboardingCompleted'] == true) {
+              Logger.d('Main', 'Onboarding is completed in Firebase');
+
+              // Update Hive with the onboarding data from Firebase
+              try {
+                Logger.d('Main', 'Updating Hive with onboarding data from Firebase');
+                final onboardingBox = Hive.box<OnboardingData>('onboarding');
+
+                // Create a new OnboardingData object with the data from Firebase
+                final onboardingData = OnboardingData()
+                  ..accountType = data['accountType']
+                  ..displayName = data['displayName']
+                  ..username = data['username']
+                  ..birthday = data['birthday']?.toDate() // Convert Timestamp to DateTime
+                  ..phoneNumber = data['phoneNumber']
+                  ..profileImageUrl = data['profileImageUrl']
+                  ..interests = List<String>.from(data['interests'] ?? [])
+                  ..onboardingCompleted = true;
+
+                // Save to Hive
+                await onboardingBox.put(user.uid, onboardingData);
+                Logger.d('Main', 'Successfully updated Hive with onboarding data from Firebase');
+              } catch (e) {
+                Logger.d('Main', 'Error updating Hive: $e');
+                // Continue even if there's an error updating Hive
+              }
+
+              // Onboarding is completed, navigate to home screen
+              setState(() {
+                _isLoading = false;
+              });
+            } else {
+              Logger.d('Main', 'Onboarding is not completed in Firebase');
+              // Onboarding is not completed, navigate to onboarding screen
+              setState(() {
+                _isLoading = false;
+              });
+            }
+          } else {
+            Logger.d('Main', 'User document does not exist in Firestore');
+            // User document doesn't exist, navigate to onboarding screen
+            setState(() {
+              _isLoading = false;
+            });
+          }
+        } catch (e) {
+          Logger.d('Main', 'Error checking onboarding status: $e');
+          // Error checking onboarding status, navigate to onboarding screen
+          setState(() {
+            _isLoading = false;
+            _error = 'Error checking onboarding status: $e';
+          });
+        }
       }
     } catch (e) {
+      Logger.d('Main', 'Error checking auth status: $e');
+      // Error checking auth status, show error
       setState(() {
         _isLoading = false;
+        _error = 'Error checking auth status: $e';
       });
-      _handleError('Error checking auth and onboarding status', e);
     }
   }
 
@@ -241,9 +274,18 @@ class _MyAppState extends ConsumerState<MyApp> {
 
     // Show syncing screen if we're syncing with Firebase
     if (_isSyncing) {
-      Logger.d('Main', 'Syncing with Firebase in the background');
-      // Allow partial functionality while syncing
-      return const AuthenticatedHomeScreen();
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Syncing with Firebase...'),
+            ],
+          ),
+        ),
+      );
     }
 
     if (_isLoading) {
@@ -377,9 +419,7 @@ class _MyAppState extends ConsumerState<MyApp> {
 
     if (onboardingData != null && onboardingData.onboardingCompleted) {
       Logger.d('Main', 'Onboarding is completed in Hive, showing home screen');
-      return const Scaffold(
-        body: AuthenticatedHomeScreen(),
-      );
+      return const AuthenticatedHomeScreen();
     } else {
       Logger.d('Main', 'Onboarding is not completed in Hive, showing onboarding screen');
       return const OnboardingScreen();
