@@ -1,7 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../services/notification_service.dart';
 import 'notification_badge.dart';
+
+final connectivityProvider = StreamProvider<ConnectivityResult>((ref) {
+  return Connectivity().onConnectivityChanged;
+});
 
 class HomeHeader extends ConsumerStatefulWidget {
   final Function()? onMenuPressed;
@@ -22,13 +29,22 @@ class HomeHeader extends ConsumerStatefulWidget {
 }
 
 class _HomeHeaderState extends ConsumerState<HomeHeader> {
+  bool _isOffline = false;
+  late final StreamSubscription<ConnectivityResult> _connectivitySubscription;
+
   @override
   void initState() {
     super.initState();
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
+      setState(() {
+        _isOffline = result == ConnectivityResult.none;
+      });
+    });
   }
 
   @override
   void dispose() {
+    _connectivitySubscription.cancel();
     super.dispose();
   }
 
@@ -42,39 +58,53 @@ class _HomeHeaderState extends ConsumerState<HomeHeader> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Hamburger menu with notification badge
-              StreamBuilder<int>(
-                stream: ref.read(notificationServiceProvider).getUnreadCount(),
-                builder: (context, snapshot) {
-                  final unreadCount = snapshot.data ?? 0;
+              // Hamburger menu with notification badge and offline indicator
+              Row(
+                children: [
+                  StreamBuilder<int>(
+                    stream: ref.read(notificationServiceProvider).getUnreadCount(),
+                    builder: (context, snapshot) {
+                      final unreadCount = snapshot.data ?? 0;
 
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.menu),
-                        onPressed: widget.onMenuPressed,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        iconSize: 28,
-                      ),
-                      if (unreadCount > 0)
-                        Positioned(
-                          // Position the badge to overlap with the icon
-                          right: 5,
-                          top: 5,
-                          child: NotificationBadge(
-                            count: unreadCount,
-                            size: 8.0,
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.menu),
+                            onPressed: widget.onMenuPressed,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            iconSize: 28,
                           ),
-                        ),
-                    ],
-                  );
-                },
+                          if (unreadCount > 0)
+                            Positioned(
+                              // Position the badge to overlap with the icon
+                              right: 5,
+                              top: 5,
+                              child: NotificationBadge(
+                                count: unreadCount,
+                                size: 8.0,
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  if (_isOffline)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'Offline',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                ],
               ),
-
-              // Center section - empty space
-              const SizedBox(width: 28),
 
               // QR code scanner
               IconButton(

@@ -193,4 +193,17 @@ class FirebaseService {
       return null;
     }
   }
+
+  // Get user data by UID
+  Future<Map<String, dynamic>?> getUserData(String uid) async {
+    try {
+      final doc = await _firestore.collection('users').doc(uid).get();
+      if (doc.exists) {
+        return doc.data();
+      }
+      return null;
+    } catch (e) {
+      throw Exception('Error fetching user data: $e');
+    }
+  }
 }

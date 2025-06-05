@@ -4,10 +4,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/auth_service.dart';
 import '../utils/logger.dart';
 
-class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
+class AuthState {
+  final bool isLoading;
+  final String? error;
+  final bool isSyncing;
+
+  AuthState({this.isLoading = true, this.error, this.isSyncing = false});
+}
+
+class AuthNotifier extends StateNotifier<AuthState> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  AuthNotifier() : super(const AsyncValue.loading()) {
+  AuthNotifier() : super(AuthState()) {
     _auth.authStateChanges().listen((user) {
       Logger.d('AuthProvider',
           "Auth state changed: ${user != null ? 'User logged in: ${user.uid}' : 'No user'}");
@@ -18,73 +26,85 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
           // Get the refreshed user
           final refreshedUser = _auth.currentUser;
           Logger.d('AuthProvider', 'User reloaded: ${refreshedUser?.uid}');
-          state = AsyncValue.data(refreshedUser);
+          state = AuthState(isLoading: false, error: null, isSyncing: false);
         }).catchError((error) {
           Logger.e('AuthProvider', 'Error reloading user', error);
           // Still update the state with the original user
-          state = AsyncValue.data(user);
+          state = AuthState(isLoading: false, error: null, isSyncing: false);
         });
       } else {
-        state = const AsyncValue.data(null);
+        state = AuthState(isLoading: false, error: null, isSyncing: false);
       }
     });
   }
 
+  void setLoading(bool isLoading) {
+    state = AuthState(isLoading: isLoading, error: state.error, isSyncing: state.isSyncing);
+  }
+
+  void setError(String? error) {
+    state = AuthState(isLoading: state.isLoading, error: error, isSyncing: state.isSyncing);
+  }
+
+  void setSyncing(bool isSyncing) {
+    state = AuthState(isLoading: state.isLoading, error: state.error, isSyncing: isSyncing);
+  }
+
   Future<void> signInWithEmail(String email, String password) async {
     try {
-      state = const AsyncValue.loading();
+      setLoading(true);
       Logger.d('AuthProvider', 'Attempting email sign in: $email');
       final userCredential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
       Logger.d('AuthProvider', 'Email sign in successful: ${userCredential.user?.uid}');
-      state = AsyncValue.data(userCredential.user);
+      state = AuthState(isLoading: false, error: null, isSyncing: false);
 
       // Check for unread notifications and send push notifications
       // This will be handled by the AuthService's signInWithEmail method
-    } catch (e, st) {
+    } catch (e) {
       Logger.d('AuthProvider', 'Email sign in failed: $e');
-      state = AsyncValue.error(e, st);
+      state = AuthState(isLoading: false, error: e.toString(), isSyncing: false);
       rethrow;
     }
   }
 
   Future<void> createAccount(String email, String password) async {
     try {
-      state = const AsyncValue.loading();
+      setLoading(true);
       Logger.d('AuthProvider', 'Attempting to create account: $email');
       final userCredential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
       Logger.d('AuthProvider', 'Account creation successful: ${userCredential.user?.uid}');
-      state = AsyncValue.data(userCredential.user);
-    } catch (e, st) {
+      state = AuthState(isLoading: false, error: null, isSyncing: false);
+    } catch (e) {
       Logger.d('AuthProvider', 'Account creation failed: $e');
-      state = AsyncValue.error(e, st);
+      state = AuthState(isLoading: false, error: e.toString(), isSyncing: false);
       rethrow;
     }
   }
 
   Future<void> signInWithGoogle(WidgetRef ref) async {
     try {
-      state = const AsyncValue.loading();
+      setLoading(true);
       Logger.d('AuthProvider', 'Starting Google sign in process');
       final authService = ref.read(authServiceProvider);
       final userCredential = await authService.signInWithGoogle();
 
       if (userCredential == null) {
         Logger.d('AuthProvider', 'Google sign in was canceled by user');
-        state = const AsyncValue.data(null);
+        state = AuthState(isLoading: false, error: null, isSyncing: false);
         return;
       }
 
       Logger.d('AuthProvider', 'Google sign in successful: ${userCredential.user?.uid}');
-      state = AsyncValue.data(userCredential.user);
-    } catch (e, st) {
+      state = AuthState(isLoading: false, error: null, isSyncing: false);
+    } catch (e) {
       Logger.d('AuthProvider', 'Google sign in failed: $e');
-      state = AsyncValue.error(e, st);
+      state = AuthState(isLoading: false, error: e.toString(), isSyncing: false);
       rethrow;
     }
   }
@@ -96,7 +116,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       Logger.d('AuthProvider', 'Starting sign out process for user: $currentUserId');
 
       // Set state to loading
-      state = const AsyncValue.loading();
+      setLoading(true);
 
       // Clear all caches before signing out
       if (currentUserId != null) {
@@ -121,30 +141,29 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       }
 
       Logger.d('AuthProvider', 'Sign out successful');
-      state = const AsyncValue.data(null);
-    } catch (e, st) {
+      state = AuthState(isLoading: false, error: null, isSyncing: false);
+    } catch (e) {
       Logger.e('AuthProvider', 'Error during sign out', e);
-      state = AsyncValue.error(e, st);
+      state = AuthState(isLoading: false, error: e.toString(), isSyncing: false);
       rethrow;
     }
   }
 
   Future<void> resetPassword(String email) async {
     try {
-      state = const AsyncValue.loading();
+      setLoading(true);
       Logger.d('AuthProvider', 'Attempting to send password reset email to: $email');
       await _auth.sendPasswordResetEmail(email: email);
       Logger.d('AuthProvider', 'Password reset email sent successfully');
-    } catch (e, st) {
+    } catch (e) {
       Logger.d('AuthProvider', 'Password reset failed: $e');
-      state = AsyncValue.error(e, st);
+      state = AuthState(isLoading: false, error: e.toString(), isSyncing: false);
       rethrow;
     }
   }
 }
 
-final authProvider =
-    StateNotifierProvider<AuthNotifier, AsyncValue<User?>>((ref) {
+final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   return AuthNotifier();
 });
 

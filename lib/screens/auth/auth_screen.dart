@@ -36,9 +36,9 @@ class AuthScreen extends ConsumerWidget {
 
       final authNotifier = ref.read(authProvider.notifier);
       await authNotifier.signInWithGoogle(ref);
-      final user = ref.read(authProvider).value;
+      
 
-      if (user != null && context.mounted) {
+      if (context.mounted) {
         // Close the loading dialog
         Navigator.of(context).pop();
 

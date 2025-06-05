@@ -141,6 +141,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       Logger.d('OnboardingScreen', 'Profile Image: ${formData.profileImageUrl}');
       Logger.d('OnboardingScreen', 'Interests: ${formData.interests}');
       Logger.d('OnboardingScreen', 'Is Complete: ${formData.isComplete()}');
+      Logger.d('OnboardingScreen', 'businessFormData: $businessFormData');
 
       if (isBusiness && businessFormData != null) {
         Logger.d('OnboardingScreen', 'Business Form Data:');
@@ -234,12 +235,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       final firebaseService = ref.read(firebaseServiceProvider);
       final authState = ref.read(authProvider);
 
-      if (authState.value == null) {
+      if (!authState.isLoading) {
         throw Exception('No user found');
       }
 
       // Ensure user is authenticated
-      authState.value!;
+      authState.isLoading;
 
       // Save to both Firebase and Hive simultaneously
       Logger.d('OnboardingScreen', 'Saving to Firebase and Hive');

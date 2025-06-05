@@ -284,7 +284,7 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
             child: Container(
               width: 250,
               height: 250,
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(8.0),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16.0),
@@ -309,6 +309,10 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
                 dataModuleStyle: const QrDataModuleStyle(
                   dataModuleShape: QrDataModuleShape.square,
                   color: Colors.black,
+                ),
+                embeddedImage: const AssetImage('assets/icon/icon_white.jpg'),
+                embeddedImageStyle: const QrEmbeddedImageStyle(
+                  size: Size(40, 40),
                 ),
               ),
             ),
@@ -367,7 +371,8 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
       // Share the file
       await Share.shareXFiles(
         [XFile(file.path)],
-        text: 'QR Code',
+        text: 'Scan this QR code in Yetu\'ga app to view my profile and what events I\'m attending',
+        subject: 'Yetu\'ga Profile QR Code',
       );
 
       // Show success message

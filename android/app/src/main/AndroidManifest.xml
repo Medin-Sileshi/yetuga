@@ -28,6 +28,12 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <!-- Replace 'yetuga' with your exact scheme -->
+                <data android:scheme="yetuga" android:host="profile" />
+                <!-- You can also add another data element for events -->
+                <data android:scheme="yetuga" android:host="event" />
             </intent-filter>
         </activity>
         <!-- Add the UCropActivity declaration -->

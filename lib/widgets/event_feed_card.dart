@@ -461,7 +461,7 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
       // Share the file
       await Share.shareXFiles(
         [XFile(file.path)],
-        text: 'QR Code',
+        text: 'Scan this QR code in the the Yetu\'ga app to view this event event',
       );
 
       // Show success message
@@ -631,7 +631,19 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                 child: Container(
                   width: 200,
                   height: 200,
-                  color: Colors.white,
+                  padding: const EdgeInsets.all(6.0),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(26), // ~0.1 opacity
+                    spreadRadius: 1,
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
                   child: QrImageView(
                     data: qrData,
                     version: QrVersions.auto,
@@ -645,6 +657,10 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                       dataModuleShape: QrDataModuleShape.square,
                       color: Colors.black,
                     ),
+                    embeddedImage: const AssetImage('assets/icon/icon_white.jpg'),
+                embeddedImageStyle: const QrEmbeddedImageStyle(
+                  size: Size(30, 30),
+                ),
                   ),
                 ),
               ),
