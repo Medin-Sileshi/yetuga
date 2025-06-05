@@ -207,4 +207,36 @@ class OnboardingNotifier extends StateNotifier<AsyncValue<OnboardingData>> {
       }
     }
   }
+
+  // Method to update profile image in both Firebase and Hive
+  Future<void> updateProfileImage(String imageUrl) async {
+    try {
+      Logger.d('OnboardingProvider', 'Updating profile image to: $imageUrl');
+
+      if (_ref == null) {
+        throw Exception('Ref is null, cannot update profile image');
+      }
+
+      // First update in Firebase
+      final storageService = _ref.read(storageServiceProvider);
+      final firebaseService = storageService.getFirebaseService();
+      await firebaseService.updateProfileImageInFirestore(imageUrl);
+
+      // Then update in local state and Hive
+      state.whenData((data) async {
+        data.profileImageUrl = imageUrl;
+
+        // Save updated data to Hive
+        await storageService.saveOnboardingData(data);
+
+        // Update state
+        updateData(data);
+
+        Logger.d('OnboardingProvider', 'Profile image successfully updated in both Firebase and Hive');
+      });
+    } catch (e) {
+      Logger.e('OnboardingProvider', 'Error updating profile image', e);
+      throw Exception('Failed to update profile image: $e');
+    }
+  }
 }

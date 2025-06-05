@@ -26,13 +26,15 @@ import 'user_profile_dialog.dart';
 class EventFeedCard extends ConsumerStatefulWidget {
   final EventModel event;
   final VoidCallback onJoin;
-  final VoidCallback onIgnore;
+  final VoidCallback? onIgnore;
+  final bool disableIgnore;
 
   const EventFeedCard({
     Key? key,
     required this.event,
     required this.onJoin,
-    required this.onIgnore,
+    this.onIgnore,
+    this.disableIgnore = false,
   }) : super(key: key);
 
   @override
@@ -461,7 +463,7 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
       // Share the file
       await Share.shareXFiles(
         [XFile(file.path)],
-        text: 'Scan this QR code in the the Yetu\'ga app to view this event event',
+        text: 'QR Code',
       );
 
       // Show success message
@@ -592,8 +594,8 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
       isDestructive: true,
     );
 
-    if (confirmed) {
-      widget.onIgnore();
+    if (confirmed && widget.onIgnore != null) {
+      widget.onIgnore!();
     }
   }
 
@@ -631,19 +633,7 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                 child: Container(
                   width: 200,
                   height: 200,
-                  padding: const EdgeInsets.all(6.0),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16.0),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(26), // ~0.1 opacity
-                    spreadRadius: 1,
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
+                  color: Colors.white,
                   child: QrImageView(
                     data: qrData,
                     version: QrVersions.auto,
@@ -657,10 +647,6 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                       dataModuleShape: QrDataModuleShape.square,
                       color: Colors.black,
                     ),
-                    embeddedImage: const AssetImage('assets/icon/icon_white.jpg'),
-                embeddedImageStyle: const QrEmbeddedImageStyle(
-                  size: Size(30, 30),
-                ),
                   ),
                 ),
               ),
@@ -1019,6 +1005,25 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                       ),
                     ),
                   ),
+
+                // Show "Ended" badge if the event has ended
+                if (_currentEvent.hasEnded)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withAlpha(51), // 0.2 opacity = 51/255
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'ENDED',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
                 Text(
                   _currentEvent.inquiry,
                   style: theme.textTheme.bodyMedium?.copyWith(fontSize: 16),
@@ -1040,10 +1045,16 @@ class _EventFeedCardState extends ConsumerState<EventFeedCard> {
                 // Ignore Button
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: isEventCreator ? null : () => _handleIgnore(context), // Disable if user is event creator
+                    onPressed: isEventCreator || widget.disableIgnore || widget.onIgnore == null
+                        ? null
+                        : () => _handleIgnore(context), // Disable if user is event creator or disableIgnore is true
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.red[400],
-                      side: BorderSide(color: isEventCreator ? Colors.grey : Colors.red[400]!),
+                      side: BorderSide(
+                        color: isEventCreator || widget.disableIgnore
+                            ? Colors.grey
+                            : Colors.red[400]!
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),

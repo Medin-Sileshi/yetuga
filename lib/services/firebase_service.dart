@@ -28,10 +28,24 @@ class FirebaseService {
         throw Exception('Only JPG and PNG images are allowed');
       }
 
-      final ref = _storage.ref().child('profile_images/${user.uid}');
+      // Generate a filename with timestamp to avoid cache issues
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'profile_$timestamp.${imageFile.path.split('.').last.toLowerCase()}';
+
+      // Use the path structure that matches the storage rules: profile_images/{userId}/{fileName}
+      final ref = _storage.ref().child('profile_images/${user.uid}/$fileName');
+
+      // Log the upload path for debugging
+      Logger.d('FirebaseService', 'Uploading profile image to: profile_images/${user.uid}/$fileName');
+
       final uploadTask = ref.putFile(imageFile);
       final snapshot = await uploadTask;
-      return await snapshot.ref.getDownloadURL();
+      final downloadUrl = await snapshot.ref.getDownloadURL();
+
+      // Log the download URL for debugging
+      Logger.d('FirebaseService', 'Profile image uploaded successfully, URL: $downloadUrl');
+
+      return downloadUrl;
     } on FirebaseException catch (e) {
       throw Exception('Firebase error: ${e.message}');
     } catch (e) {
@@ -194,16 +208,23 @@ class FirebaseService {
     }
   }
 
-  // Get user data by UID
-  Future<Map<String, dynamic>?> getUserData(String uid) async {
+  // Update profile image in Firestore
+  Future<void> updateProfileImageInFirestore(String imageUrl) async {
     try {
-      final doc = await _firestore.collection('users').doc(uid).get();
-      if (doc.exists) {
-        return doc.data();
-      }
-      return null;
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('User not authenticated');
+
+      // Update the profile image URL in Firestore
+      await _firestore.collection('users').doc(user.uid).update({
+        'profileImageUrl': imageUrl,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      Logger.d('FirebaseService', 'Profile image updated successfully in Firestore: $imageUrl');
+    } on FirebaseException catch (e) {
+      throw Exception('Firebase error: ${e.message}');
     } catch (e) {
-      throw Exception('Error fetching user data: $e');
+      throw Exception('Failed to update profile image in Firestore: $e');
     }
   }
 }

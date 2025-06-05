@@ -185,4 +185,17 @@ class EventModel {
 
   // Generate a unique content key for this event
   String get contentKey => '$userId-$inquiry-${date.year}-${date.month}-${date.day}-${time.hour}-${time.minute}';
+
+  // Check if the event has ended (is in the past)
+  bool get hasEnded {
+    final now = DateTime.now();
+    final eventDateTime = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute
+    );
+    return eventDateTime.isBefore(now);
+  }
 }
