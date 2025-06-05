@@ -4,13 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yetuga/providers/firebase_provider.dart';
 
+import '../../models/event_model.dart';
 import '../../models/onboarding_data.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/onboarding_provider.dart';
+import '../../providers/service_providers.dart';
 import '../../providers/user_cache_provider.dart';
 import '../../services/follow_service.dart';
 import '../../utils/logger.dart';
 import '../../utils/confirmation_dialog.dart';
+import '../../widgets/event_feed_card.dart';
+import '../../widgets/profile_image_picker_dialog.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   final String? userId; // Optional userId parameter, if null shows current user's profile
@@ -158,49 +162,135 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Profile image
-                  Center(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: _isBusinessAccount(user, onboardingData, ref)
-                              ? const Color(0xFFFFD700) // Gold color for business
-                              : Theme.of(context).colorScheme.secondary,
-                          width: 3,
+                  // Profile header with improved design
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 24.0, horizontal: 16.0),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          _isBusinessAccount(user, onboardingData, ref)
+                              ? const Color(0xFFFFD700).withAlpha(50) // Gold tint for business accounts
+                              : Theme.of(context).colorScheme.primary.withAlpha(30),
+                          Theme.of(context).scaffoldBackgroundColor,
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      children: [
+                        // Profile image with edit button for current user
+                        Center(
+                          child: GestureDetector(
+                            onTap: widget.userId == null && user != null
+                                ? () => _showProfileImagePickerDialog(context, user, onboardingData)
+                                : null,
+                            child: Stack(
+                              children: [
+                                Container(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: _isBusinessAccount(user, onboardingData, ref)
+                                          ? const Color(0xFFFFD700) // Gold color for business
+                                          : Theme.of(context).colorScheme.secondary,
+                                      width: 3,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withAlpha(40),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                  child: CircleAvatar(
+                                    radius: 60, // Larger for profile page
+                                    backgroundColor: Colors.grey[300],
+                                    child: _getUserProfileImage(user, onboardingData, ref),
+                                  ),
+                                ),
+                                // Edit button overlay (only for current user's profile)
+                                if (widget.userId == null && user != null)
+                                  Positioned(
+                                    right: 0,
+                                    bottom: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context).colorScheme.primary,
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withAlpha(40),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                        border: Border.all(
+                                          color: Theme.of(context).scaffoldBackgroundColor,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        Icons.edit,
+                                        size: 20,
+                                        color: Theme.of(context).colorScheme.onPrimary,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ),
-                        boxShadow: _isBusinessAccount(user, onboardingData, ref)
-                            ? [
-                                BoxShadow(
-                                  color: const Color(0xFFFFD700).withAlpha(128),
-                                  blurRadius: 10,
-                                  spreadRadius: 2,
-                                )
-                              ]
-                            : null,
-                      ),
-                      child: CircleAvatar(
-                        radius: 60, // Larger for profile page
-                        backgroundColor: Colors.grey[300],
-                        child: _getUserProfileImage(user, onboardingData, ref),
-                      ),
+                        const SizedBox(height: 16),
+
+                        // Display name
+                        Text(
+                          _getUserDisplayName(user, onboardingData, ref),
+                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+
+                        // Username
+                        Text(
+                          '@${_getUserUsername(user, onboardingData, ref)}',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: Theme.of(context).textTheme.bodySmall?.color,
+                              ),
+                          textAlign: TextAlign.center,
+                        ),
+
+                        // Account type badge
+                        if (_isBusinessAccount(user, onboardingData, ref))
+                          Container(
+                            margin: const EdgeInsets.only(top: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFD700).withAlpha(50),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: const Color(0xFFFFD700),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Text(
+                              'Business Account',
+                              style: TextStyle(
+                                color: Color(0xFFFFD700),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Display name
-                  Text(
-                    _getUserDisplayName(user, onboardingData, ref),
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-
-                  // Username
-                  Text(
-                    '@${_getUserUsername(user, onboardingData, ref)}',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: Theme.of(context).textTheme.bodySmall?.color,
-                        ),
-                  ),
 
                   // Follow/Unfollow button (only show when viewing other profiles)
                   if (widget.userId != null && ref.read(currentUserProvider) != null)
@@ -222,91 +312,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 16),
-
-                  // Account type
-                  ListTile(
-                    leading: Icon(
-                      _isBusinessAccount(user, onboardingData, ref)
-                          ? Icons.business
-                          : Icons.person,
-                      color: Theme.of(context).iconTheme.color,
-                    ),
-                    title: const Text('Account Type'),
-                    subtitle: Text(
-                      _isBusinessAccount(user, onboardingData, ref)
-                          ? 'Business'
-                          : 'Personal',
-                    ),
-                  ),
-
-                  // Email
-                  if (user?.email != null || (_userData != null && _userData!['email'] != null))
-                    ListTile(
-                      leading: Icon(
-                        Icons.email,
-                        color: Theme.of(context).iconTheme.color,
-                      ),
-                      title: const Text('Email'),
-                      subtitle: Text(
-                        user?.email ?? _userData!['email'] ?? 'Not available',
-                      ),
-                    ),
-
-                  // Phone number
-                  if (onboardingData?.phoneNumber != null || (_userData != null && _userData!['phoneNumber'] != null))
-                    ListTile(
-                      leading: Icon(
-                        Icons.phone,
-                        color: Theme.of(context).iconTheme.color,
-                      ),
-                      title: const Text('Phone'),
-                      subtitle: Text(
-                        onboardingData?.phoneNumber ?? _userData!['phoneNumber'] ?? 'Not available',
-                      ),
-                    ),
-
-                  // Birthday or Established date
-                  if (_hasBirthdayOrEstablishedDate(user, onboardingData))
-                    ListTile(
-                      leading: Icon(
-                        _isBusinessAccount(user, onboardingData, ref)
-                            ? Icons.calendar_today
-                            : Icons.cake,
-                        color: Theme.of(context).iconTheme.color,
-                      ),
-                      title: Text(
-                        _isBusinessAccount(user, onboardingData, ref)
-                            ? 'Established'
-                            : 'Birthday',
-                      ),
-                      subtitle: Text(
-                        _getFormattedDate(user, onboardingData),
-                      ),
-                    ),
-
-                  // Interests or Business types
-                  Builder(builder: (context) {
-                    final List<String> interests = _getInterestsOrBusinessTypes(user, onboardingData);
-                    if (interests.isNotEmpty) {
-                      return ListTile(
-                        leading: Icon(
-                          _isBusinessAccount(user, onboardingData, ref)
-                              ? Icons.category
-                              : Icons.interests,
-                          color: Theme.of(context).iconTheme.color,
-                        ),
-                        title: Text(
-                          _isBusinessAccount(user, onboardingData, ref)
-                              ? 'Business Types'
-                              : 'Interests',
-                        ),
-                        subtitle: Text(interests.join(', ')),
-                      );
-                    } else {
-                      return const SizedBox.shrink(); // Empty widget if no interests
-                    }
-                  }),
+                  // Joined Events Section (without divider)
+                  _buildJoinedEventsSection(),
                 ],
               ),
             ),
@@ -423,99 +430,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return 'username';
   }
 
-  // Helper method to check if user has birthday or established date
-  bool _hasBirthdayOrEstablishedDate(User? user, OnboardingData? onboardingData) {
-    if (onboardingData?.birthday != null) {
-      return true;
-    }
 
-    if (_userData != null) {
-      // Check for birthday or establishedDate in Firestore data
-      if (_userData!.containsKey('birthday') && _userData!['birthday'] != null) {
-        return true;
-      }
-      if (_userData!.containsKey('establishedDate') && _userData!['establishedDate'] != null) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  // Helper method to get formatted date
-  String _getFormattedDate(User? user, OnboardingData? onboardingData) {
-    // First try to get from onboarding data
-    if (onboardingData?.birthday != null) {
-      return _formatDate(onboardingData!.birthday!);
-    }
-
-    // Then try to get from Firestore data
-    if (_userData != null) {
-      if (_userData!.containsKey('birthday') && _userData!['birthday'] != null) {
-        final timestamp = _userData!['birthday'] as dynamic;
-        if (timestamp is DateTime) {
-          return _formatDate(timestamp);
-        } else if (timestamp.runtimeType.toString().contains('Timestamp')) {
-          // Handle Firestore Timestamp
-          final seconds = timestamp.seconds as int;
-          final nanoseconds = timestamp.nanoseconds as int;
-          final dateTime = DateTime.fromMillisecondsSinceEpoch(
-            seconds * 1000 + (nanoseconds / 1000000).round(),
-          );
-          return _formatDate(dateTime);
-        }
-      }
-
-      if (_userData!.containsKey('establishedDate') && _userData!['establishedDate'] != null) {
-        final timestamp = _userData!['establishedDate'] as dynamic;
-        if (timestamp is DateTime) {
-          return _formatDate(timestamp);
-        } else if (timestamp.runtimeType.toString().contains('Timestamp')) {
-          // Handle Firestore Timestamp
-          final seconds = timestamp.seconds as int;
-          final nanoseconds = timestamp.nanoseconds as int;
-          final dateTime = DateTime.fromMillisecondsSinceEpoch(
-            seconds * 1000 + (nanoseconds / 1000000).round(),
-          );
-          return _formatDate(dateTime);
-        }
-      }
-    }
-
-    return 'Not available';
-  }
-
-  // Helper method to get interests or business types
-  List<String> _getInterestsOrBusinessTypes(User? user, OnboardingData? onboardingData) {
-    // First try to get from onboarding data
-    if (onboardingData?.interests != null && onboardingData!.interests!.isNotEmpty) {
-      return onboardingData.interests!;
-    }
-
-    // Then try to get from Firestore data
-    if (_userData != null) {
-      if (_userData!.containsKey('interests') && _userData!['interests'] != null) {
-        final interests = _userData!['interests'] as List<dynamic>?;
-        if (interests != null) {
-          return interests.map((e) => e.toString()).toList();
-        }
-      }
-
-      if (_userData!.containsKey('businessTypes') && _userData!['businessTypes'] != null) {
-        final businessTypes = _userData!['businessTypes'] as List<dynamic>?;
-        if (businessTypes != null) {
-          return businessTypes.map((e) => e.toString()).toList();
-        }
-      }
-    }
-
-    return [];
-  }
-
-  // Helper method to format date
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
-  }
 
   // Build follow/unfollow button
   Widget _buildFollowButton() {
@@ -549,6 +464,127 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
         const SizedBox(height: 4),
         Text(label),
+      ],
+    );
+  }
+
+  // Show profile image picker bottom sheet
+  Future<void> _showProfileImagePickerDialog(BuildContext context, User user, OnboardingData? onboardingData) async {
+    // Get current profile image URL
+    String? currentImageUrl;
+    if (onboardingData != null && onboardingData.profileImageUrl != null) {
+      currentImageUrl = onboardingData.profileImageUrl;
+    } else if (user.photoURL != null) {
+      currentImageUrl = user.photoURL;
+    }
+
+    // Show the bottom sheet
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => ProfileImagePickerDialog(
+        currentImageUrl: currentImageUrl,
+      ),
+    );
+
+    // If the image was updated successfully, refresh the profile data
+    if (result == true && mounted) {
+      // Clear the Flutter image cache to ensure the UI updates with the new image
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+      Logger.d('ProfileScreen', 'Cleared Flutter image cache after profile image update');
+
+      // Clear the user's image cache
+      final userCacheService = ref.read(userCacheServiceProvider);
+      await userCacheService.clearImageCache(user.uid);
+      Logger.d('ProfileScreen', 'Cleared user image cache for: ${user.uid}');
+
+      setState(() {
+        _isLoading = true;
+      });
+
+      // Reload user data
+      await _loadUserData();
+
+      // Force a rebuild of the UI with a new timestamp to ensure fresh image loading
+      if (mounted) {
+        setState(() {});
+      }
+    }
+  }
+
+
+
+  // Build the joined events section
+  Widget _buildJoinedEventsSection() {
+    // Get the user ID (current user or profile user)
+    final userId = widget.userId ?? ref.read(currentUserProvider)?.uid;
+
+    if (userId == null) {
+      return const SizedBox.shrink();
+    }
+
+    // Get the event service
+    final eventService = ref.read(eventServiceProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16.0),
+          child: Text(
+            'Joined Events',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+        ),
+
+        // Stream builder for joined events
+        StreamBuilder<List<EventModel>>(
+          stream: eventService.getJoinedEvents(limit: 10),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (snapshot.hasError) {
+              return Center(child: Text('Error: ${snapshot.error}'));
+            }
+
+            final events = snapshot.data ?? [];
+
+            if (events.isEmpty) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text('No joined events yet'),
+                ),
+              );
+            }
+
+            return ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: events.length,
+              itemBuilder: (context, index) {
+                final event = events[index];
+                return EventFeedCard(
+                  event: event,
+                  onJoin: () {
+                    // Handle join action
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('You are already joined to this event')),
+                    );
+                  },
+                  onIgnore: null, // Disable ignore button for joined events
+                  disableIgnore: true, // Gray out the ignore button
+                );
+              },
+            );
+          },
+        ),
       ],
     );
   }
