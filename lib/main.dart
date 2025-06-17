@@ -155,9 +155,18 @@ class _MyAppState extends ConsumerState<MyApp> {
   bool _isSyncing = false;
   bool _hasSyncedThisSession = false;
 
+  late StreamSubscription<ConnectivityResult> _connectivitySubscription;
+
   @override
   void initState() {
     super.initState();
+
+    // Monitor connectivity changes
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
+      setState(() {
+      });
+    });
+
     // Check auth and onboarding status after the widget is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAuthAndOnboardingStatus();

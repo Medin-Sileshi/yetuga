@@ -1,7 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:yetuga/screens/pdf_viewer_screen.dart';
 import 'package:yetuga/utils/logger.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
