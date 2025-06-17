@@ -40,7 +40,7 @@ class AuthPageTemplate extends ConsumerWidget {
           IconButton(
             icon: Icon(
               isDark ? Icons.light_mode : Icons.dark_mode,
-              color: isDark ? AppColors.white : AppColors.primary,
+              color: Theme.of(context).iconTheme.color,
             ),
             onPressed: () => ref.read(themeProvider.notifier).toggleTheme(),
           ),
@@ -66,8 +66,8 @@ class AuthPageTemplate extends ConsumerWidget {
                           // Logo
                           Image.asset(
                             isDark
-                                ? 'assets/dark/logo_light.png'
-                                : 'assets/light/logo_dark.png',
+                                ? 'assets/light/logo_dark.png'
+                                : 'assets/dark/logo_light.png',
                             height: 60,
                             fit: BoxFit.contain,
                           ),
@@ -85,7 +85,7 @@ class AuthPageTemplate extends ConsumerWidget {
                       ),
                       // Bottom Buttons
                       if (bottomButtons.isNotEmpty) ...[
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 180),
                         ...bottomButtons,
                       ],
                     ],

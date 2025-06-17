@@ -1,4 +1,8 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'package:yetuga/screens/pdf_viewer_screen.dart';
 import 'package:yetuga/utils/logger.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yetuga/providers/onboarding_provider.dart';
@@ -11,10 +15,16 @@ import '../../widgets/auth_page_template.dart';
 import 'email_signin_screen.dart';
 import '../authenticated_home_screen.dart';
 
-class AuthScreen extends ConsumerWidget {
+class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
 
+  @override
+  ConsumerState<AuthScreen> createState() => _AuthScreenState();
+}
+
+class _AuthScreenState extends ConsumerState<AuthScreen> {
   Future<void> _handleGoogleSignIn(BuildContext context, WidgetRef ref) async {
+
     try {
       // Show loading dialog
       if (context.mounted) {
@@ -36,7 +46,15 @@ class AuthScreen extends ConsumerWidget {
 
       final authNotifier = ref.read(authProvider.notifier);
       await authNotifier.signInWithGoogle(ref);
-      
+
+      // check if the user actually signed in (user canceled if no user exists)
+      if (FirebaseAuth.instance.currentUser == null) {
+        // user canceled google sign-in; close the dialog and do nothing.
+        if (context.mounted) {
+          Navigator.of(context).pop();
+        }
+        return;
+      }
 
       if (context.mounted) {
         // Close the loading dialog
@@ -71,7 +89,8 @@ class AuthScreen extends ConsumerWidget {
             data: (data) async {
               if (data.isComplete()) {
                 onboardingCompletedInHive = true;
-                Logger.d('AuthScreen', 'Onboarding is completed in Hive: ${data.toString()}');
+                Logger.d('AuthScreen',
+                    'Onboarding is completed in Hive: ${data.toString()}');
               } else {
                 Logger.d('AuthScreen', 'Onboarding is not completed in Hive');
               }
@@ -80,7 +99,8 @@ class AuthScreen extends ConsumerWidget {
               Logger.d('AuthScreen', 'Onboarding data is loading from Hive');
             },
             error: (error, stack) {
-              Logger.d('AuthScreen', 'Error loading onboarding data from Hive: $error');
+              Logger.d('AuthScreen',
+                  'Error loading onboarding data from Hive: $error');
             },
           );
 
@@ -92,7 +112,8 @@ class AuthScreen extends ConsumerWidget {
 
               // Navigate to home screen
               Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const AuthenticatedHomeScreen()),
+                MaterialPageRoute(
+                    builder: (context) => const AuthenticatedHomeScreen()),
                 (route) => false,
               );
               return; // Exit early
@@ -109,12 +130,15 @@ class AuthScreen extends ConsumerWidget {
             Navigator.of(context).pop();
           }
 
-          if (userProfile != null && userProfile['onboardingCompleted'] == true) {
-            Logger.d('AuthScreen', 'Onboarding is completed in Firebase, navigating to home screen');
+          if (userProfile != null &&
+              userProfile['onboardingCompleted'] == true) {
+            Logger.d('AuthScreen',
+                'Onboarding is completed in Firebase, navigating to home screen');
 
             // Update Hive with the onboarding data from Firebase
             try {
-              Logger.d('AuthScreen', 'Updating Hive with onboarding data from Firebase');
+              Logger.d('AuthScreen',
+                  'Updating Hive with onboarding data from Firebase');
               final onboardingNotifier = ref.read(onboardingProvider.notifier);
 
               // Create a new OnboardingData object with the data from Firebase
@@ -122,7 +146,8 @@ class AuthScreen extends ConsumerWidget {
                 ..accountType = userProfile['accountType']
                 ..displayName = userProfile['displayName']
                 ..username = userProfile['username']
-                ..birthday = userProfile['birthday']?.toDate() // Convert Timestamp to DateTime
+                ..birthday = userProfile['birthday']
+                    ?.toDate() // Convert Timestamp to DateTime
                 ..phoneNumber = userProfile['phoneNumber']
                 ..profileImageUrl = userProfile['profileImageUrl']
                 ..interests = List<String>.from(userProfile['interests'] ?? [])
@@ -130,7 +155,8 @@ class AuthScreen extends ConsumerWidget {
 
               // Save to Hive
               await onboardingNotifier.saveData(onboardingData);
-              Logger.d('AuthScreen', 'Successfully updated Hive with onboarding data from Firebase');
+              Logger.d('AuthScreen',
+                  'Successfully updated Hive with onboarding data from Firebase');
             } catch (e) {
               Logger.d('AuthScreen', 'Error updating Hive: $e');
               // Continue even if there's an error updating Hive
@@ -138,21 +164,25 @@ class AuthScreen extends ConsumerWidget {
 
             if (context.mounted) {
               Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const AuthenticatedHomeScreen()),
+                MaterialPageRoute(
+                    builder: (context) => const AuthenticatedHomeScreen()),
                 (route) => false,
               );
             }
           } else {
-            Logger.d('AuthScreen', 'Onboarding is not completed in Firebase, navigating to onboarding screen');
+            Logger.d('AuthScreen',
+                'Onboarding is not completed in Firebase, navigating to onboarding screen');
             if (context.mounted) {
               Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const OnboardingScreen()),
+                MaterialPageRoute(
+                    builder: (context) => const OnboardingScreen()),
                 (route) => false,
               );
             }
           }
         } catch (e) {
-          Logger.d('AuthScreen', 'Error checking Firebase for onboarding status: $e');
+          Logger.d('AuthScreen',
+              'Error checking Firebase for onboarding status: $e');
           // Close the loading dialog if it's still open
           if (context.mounted) {
             Navigator.of(context).pop();
@@ -169,21 +199,25 @@ class AuthScreen extends ConsumerWidget {
             data: (data) async {
               if (data.isComplete()) {
                 onboardingCompletedInHive = true;
-                Logger.d('AuthScreen', 'Onboarding is completed in Hive (fallback check): ${data.toString()}');
+                Logger.d('AuthScreen',
+                    'Onboarding is completed in Hive (fallback check): ${data.toString()}');
               }
             },
             loading: () {
-              Logger.d('AuthScreen', 'Onboarding data is still loading from Hive');
+              Logger.d(
+                  'AuthScreen', 'Onboarding data is still loading from Hive');
             },
             error: (error, stack) {
-              Logger.d('AuthScreen', 'Error loading onboarding data from Hive: $error');
+              Logger.d('AuthScreen',
+                  'Error loading onboarding data from Hive: $error');
             },
           );
 
           if (onboardingCompletedInHive && context.mounted) {
             // If onboarding is completed in Hive, navigate to home screen
             Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (context) => const AuthenticatedHomeScreen()),
+              MaterialPageRoute(
+                  builder: (context) => const AuthenticatedHomeScreen()),
               (route) => false,
             );
           } else if (context.mounted) {
@@ -210,7 +244,7 @@ class AuthScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final themeMode = ref.watch(themeProvider);
     final isDark = themeMode == ThemeMode.dark;
 
@@ -220,8 +254,8 @@ class AuthScreen extends ConsumerWidget {
         onTap: () => _handleGoogleSignIn(context, ref),
         child: Image.asset(
           isDark
-              ? 'assets/dark/signin_with_google_light.png'
-              : 'assets/light/signin_with_google_dark.png',
+              ? 'assets/light/signin_with_google_dark.png'
+              : 'assets/dark/signin_with_google_light.png',
           height: 80,
           fit: BoxFit.contain,
         ),
@@ -238,7 +272,59 @@ class AuthScreen extends ConsumerWidget {
           },
           child: const Text('Sign in with Email'),
         ),
+        Padding(
+          padding: const EdgeInsets.only(top: 16.0),
+          child: _buildTermsAndPolicyText(context),
+        ),
       ],
+    );
+  }
+
+  Widget _buildTermsAndPolicyText(BuildContext context) {
+    return Center(
+      child: RichText(
+        textAlign: TextAlign.center,
+        text: TextSpan(
+          style: Theme.of(context).textTheme.bodySmall,
+          children: [
+            const TextSpan(text: 'By continuing to sign up, you agree to the '),
+            TextSpan(
+              text: 'Privacy Policy',
+              style: const TextStyle(
+                  color: Colors.blue, decoration: TextDecoration.underline),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const PdfViewerScreen(
+                        title: 'Privacy Policy',
+                        assetPath: 'assets/pdf/PrivacyPolicy.pdf',
+                      ),
+                    ),
+                  );
+                },
+            ),
+            const TextSpan(text: ' and '),
+            TextSpan(
+              text: 'Terms & Conditions',
+              style: const TextStyle(
+                  color: Colors.blue, decoration: TextDecoration.underline),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const PdfViewerScreen(
+                        title: 'Terms & Conditions',
+                        assetPath: 'assets/pdf/Terms&Conditions.pdf',
+                      ),
+                    ),
+                  );
+                },
+            ),
+            const TextSpan(text: '.'),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:integration_test/integration_test.dart';
 import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:yetuga/services/cache_manager.dart';
@@ -9,15 +10,14 @@ import 'package:yetuga/services/firestore_config_service.dart';
 import 'package:yetuga/utils/logger.dart';
 
 void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
   setUpAll(() async {
-    TestWidgetsFlutterBinding.ensureInitialized();
     await Hive.initFlutter();
     await Hive.openBox('cache_metadata');
-    // Open a test box for cache manager if needed
-    await Hive.openBox('cacheBox');
   });
 
-  test('Run simple service test', () async {
+  testWidgets('Run simple service test', (WidgetTester tester) async {
     final cacheManager = CacheManager();
     final eventCacheService = EventCacheService();
     final firestoreConfigService = FirestoreConfigService();

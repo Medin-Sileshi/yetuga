@@ -140,7 +140,7 @@ class _CacheTestScreenState extends ConsumerState<CacheTestScreen> {
       appBar: AppBar(
         title: const Text('Cache Manager Test'),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
