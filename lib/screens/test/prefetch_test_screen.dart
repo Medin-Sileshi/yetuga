@@ -140,7 +140,7 @@ class _PrefetchTestScreenState extends ConsumerState<PrefetchTestScreen> {
       appBar: AppBar(
         title: const Text('Prefetch Service Test'),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

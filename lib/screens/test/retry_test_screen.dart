@@ -194,7 +194,7 @@ class _RetryTestScreenState extends ConsumerState<RetryTestScreen> {
       appBar: AppBar(
         title: const Text('Retry Service Test'),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -273,7 +273,8 @@ class _RetryTestScreenState extends ConsumerState<RetryTestScreen> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 8),
-            Expanded(
+            SizedBox(
+              height: 120, // Fixed height for the log
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
