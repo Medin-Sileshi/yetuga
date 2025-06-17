@@ -132,7 +132,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           if (userProfile != null &&
               userProfile['onboardingCompleted'] == true) {
             Logger.d('AuthScreen',
-                'Onboarding is completed in Firebase, navigating to home screen');
+                'Onboarding is completed, navigating to home screen');
 
             // Update Hive with the onboarding data from Firebase
             try {
@@ -170,7 +170,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             }
           } else {
             Logger.d('AuthScreen',
-                'Onboarding is not completed in Firebase, navigating to onboarding screen');
+                'Onboarding is not completed, navigating to onboarding screen');
             if (context.mounted) {
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(
@@ -181,7 +181,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           }
         } catch (e) {
           Logger.d('AuthScreen',
-              'Error checking Firebase for onboarding status: $e');
+              'Error checking onboarding status: $e');
           // Close the loading dialog if it's still open
           if (context.mounted) {
             Navigator.of(context).pop();
