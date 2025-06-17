@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -155,17 +158,12 @@ class _MyAppState extends ConsumerState<MyApp> {
   bool _isSyncing = false;
   bool _hasSyncedThisSession = false;
 
-  late StreamSubscription<ConnectivityResult> _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
 
     // Monitor connectivity changes
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
-      setState(() {
-      });
-    });
 
     // Check auth and onboarding status after the widget is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
