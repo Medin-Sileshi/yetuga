@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -96,6 +97,30 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     }
   }
 
+  Future<void> _showBusinessAccountAlertAndSubmit() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Business Account'),
+        content: const Text(
+            'You are about to finish onboarding as a Business Account. \nYou will be asked to go through the verification process inside Yetu\'ga on the business profile page. \nYou will be asked to make a one-time payment of 500ETB for verification.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+    if (result == true) {
+      _submitOnboarding();
+    }
+  }
+
   Future<void> _handleSignOut() async {
     try {
       final auth = ref.read(authProvider.notifier);
@@ -129,7 +154,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       final isBusiness = accountType == 'business';
 
       // For business accounts, we need to get the business form data
-      var businessFormData = isBusiness ? ref.read(businessOnboardingFormProvider) : null;
+      var businessFormData =
+          isBusiness ? ref.read(businessOnboardingFormProvider) : null;
 
       // Debug log the form data
       Logger.d('OnboardingScreen', 'Submitting onboarding data:');
@@ -138,16 +164,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       Logger.d('OnboardingScreen', 'Username: ${formData.username}');
       Logger.d('OnboardingScreen', 'Birthday: ${formData.birthday}');
       Logger.d('OnboardingScreen', 'Phone Number: ${formData.phoneNumber}');
-      Logger.d('OnboardingScreen', 'Profile Image: ${formData.profileImageUrl}');
+      Logger.d(
+          'OnboardingScreen', 'Profile Image: ${formData.profileImageUrl}');
       Logger.d('OnboardingScreen', 'Interests: ${formData.interests}');
       Logger.d('OnboardingScreen', 'Is Complete: ${formData.isComplete()}');
       Logger.d('OnboardingScreen', 'businessFormData: $businessFormData');
 
       if (isBusiness && businessFormData != null) {
         Logger.d('OnboardingScreen', 'Business Form Data:');
-        Logger.d('OnboardingScreen', 'Business Name: ${businessFormData.businessName}');
-        Logger.d('OnboardingScreen', 'Established Date: ${businessFormData.establishedDate}');
-        Logger.d('OnboardingScreen', 'Business Types: ${businessFormData.businessTypes}');
+        Logger.d('OnboardingScreen',
+            'Business Name: ${businessFormData.businessName}');
+        Logger.d('OnboardingScreen',
+            'Established Date: ${businessFormData.establishedDate}');
+        Logger.d('OnboardingScreen',
+            'Business Types: ${businessFormData.businessTypes}');
       }
 
       // Check if form is complete
@@ -159,69 +189,111 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
         // Log business form data
         Logger.d('OnboardingScreen', 'Business form data:');
-        Logger.d('OnboardingScreen', 'accountType: ${businessFormData.accountType}');
-        Logger.d('OnboardingScreen', 'businessName: ${businessFormData.businessName}');
+        Logger.d(
+            'OnboardingScreen', 'accountType: ${businessFormData.accountType}');
+        Logger.d('OnboardingScreen',
+            'businessName: ${businessFormData.businessName}');
         Logger.d('OnboardingScreen', 'username: ${businessFormData.username}');
-        Logger.d('OnboardingScreen', 'establishedDate: ${businessFormData.establishedDate}');
-        Logger.d('OnboardingScreen', 'phoneNumber: ${businessFormData.phoneNumber}');
-        Logger.d('OnboardingScreen', 'profileImageUrl: ${businessFormData.profileImageUrl}');
-        Logger.d('OnboardingScreen', 'businessTypes: ${businessFormData.businessTypes}');
-        Logger.d('OnboardingScreen', 'isComplete: ${businessFormData.isComplete()}');
+        Logger.d('OnboardingScreen',
+            'establishedDate: ${businessFormData.establishedDate}');
+        Logger.d(
+            'OnboardingScreen', 'phoneNumber: ${businessFormData.phoneNumber}');
+        Logger.d('OnboardingScreen',
+            'profileImageUrl: ${businessFormData.profileImageUrl}');
+        Logger.d('OnboardingScreen',
+            'businessTypes: ${businessFormData.businessTypes}');
+        Logger.d(
+            'OnboardingScreen', 'isComplete: ${businessFormData.isComplete()}');
 
         // Make sure the account type is set in the business form provider
-        if (businessFormData.accountType == null || businessFormData.accountType != 'business') {
-          Logger.d('OnboardingScreen', 'Setting account type in business form provider');
-          ref.read(businessOnboardingFormProvider.notifier).setAccountType('business');
+        if (businessFormData.accountType == null ||
+            businessFormData.accountType != 'business') {
+          Logger.d('OnboardingScreen',
+              'Setting account type in business form provider');
+          ref
+              .read(businessOnboardingFormProvider.notifier)
+              .setAccountType('business');
         }
 
         // Make sure the business name is set in the business form provider
-        if (businessFormData.businessName == null && formData.displayName != null) {
-          Logger.d('OnboardingScreen', 'Setting business name in business form provider');
-          ref.read(businessOnboardingFormProvider.notifier).setBusinessName(formData.displayName!);
+        if (businessFormData.businessName == null &&
+            formData.displayName != null) {
+          Logger.d('OnboardingScreen',
+              'Setting business name in business form provider');
+          ref
+              .read(businessOnboardingFormProvider.notifier)
+              .setBusinessName(formData.displayName!);
         }
 
         // Make sure the username is set in the business form provider
         if (businessFormData.username == null && formData.username != null) {
-          Logger.d('OnboardingScreen', 'Setting username in business form provider');
-          ref.read(businessOnboardingFormProvider.notifier).setUsername(formData.username!);
+          Logger.d(
+              'OnboardingScreen', 'Setting username in business form provider');
+          ref
+              .read(businessOnboardingFormProvider.notifier)
+              .setUsername(formData.username!);
         }
 
         // Make sure the established date is set in the business form provider
-        if (businessFormData.establishedDate == null && formData.birthday != null) {
-          Logger.d('OnboardingScreen', 'Setting established date in business form provider');
-          ref.read(businessOnboardingFormProvider.notifier).setEstablishedDate(formData.birthday!);
+        if (businessFormData.establishedDate == null &&
+            formData.birthday != null) {
+          Logger.d('OnboardingScreen',
+              'Setting established date in business form provider');
+          ref
+              .read(businessOnboardingFormProvider.notifier)
+              .setEstablishedDate(formData.birthday!);
         }
 
         // Make sure the phone number is set in the business form provider
-        if (businessFormData.phoneNumber == null && formData.phoneNumber != null) {
-          Logger.d('OnboardingScreen', 'Setting phone number in business form provider');
-          ref.read(businessOnboardingFormProvider.notifier).setPhoneNumber(formData.phoneNumber!);
+        if (businessFormData.phoneNumber == null &&
+            formData.phoneNumber != null) {
+          Logger.d('OnboardingScreen',
+              'Setting phone number in business form provider');
+          ref
+              .read(businessOnboardingFormProvider.notifier)
+              .setPhoneNumber(formData.phoneNumber!);
         }
 
         // Make sure the profile image is set in the business form provider
-        if (businessFormData.profileImageUrl == null && formData.profileImageUrl != null) {
-          Logger.d('OnboardingScreen', 'Setting profile image in business form provider');
-          ref.read(businessOnboardingFormProvider.notifier).setProfileImage(formData.profileImageUrl!);
+        if (businessFormData.profileImageUrl == null &&
+            formData.profileImageUrl != null) {
+          Logger.d('OnboardingScreen',
+              'Setting profile image in business form provider');
+          ref
+              .read(businessOnboardingFormProvider.notifier)
+              .setProfileImage(formData.profileImageUrl!);
         }
 
         // Make sure the business types are set in the business form provider
-        if ((businessFormData.businessTypes == null || businessFormData.businessTypes!.isEmpty) &&
-            formData.interests != null && formData.interests!.isNotEmpty) {
-          Logger.d('OnboardingScreen', 'Setting business types in business form provider');
-          ref.read(businessOnboardingFormProvider.notifier).setBusinessTypes(formData.interests!);
+        if ((businessFormData.businessTypes == null ||
+                businessFormData.businessTypes!.isEmpty) &&
+            formData.interests != null &&
+            formData.interests!.isNotEmpty) {
+          Logger.d('OnboardingScreen',
+              'Setting business types in business form provider');
+          ref
+              .read(businessOnboardingFormProvider.notifier)
+              .setBusinessTypes(formData.interests!);
         }
 
         // Check again if the form is complete
         businessFormData = ref.read(businessOnboardingFormProvider);
         if (!businessFormData.isComplete()) {
           Logger.d('OnboardingScreen', 'Business form is still incomplete!');
-          Logger.d('OnboardingScreen', 'accountType: ${businessFormData.accountType}');
-          Logger.d('OnboardingScreen', 'businessName: ${businessFormData.businessName}');
-          Logger.d('OnboardingScreen', 'username: ${businessFormData.username}');
-          Logger.d('OnboardingScreen', 'establishedDate: ${businessFormData.establishedDate}');
-          Logger.d('OnboardingScreen', 'phoneNumber: ${businessFormData.phoneNumber}');
-          Logger.d('OnboardingScreen', 'profileImageUrl: ${businessFormData.profileImageUrl}');
-          Logger.d('OnboardingScreen', 'businessTypes: ${businessFormData.businessTypes}');
+          Logger.d('OnboardingScreen',
+              'accountType: ${businessFormData.accountType}');
+          Logger.d('OnboardingScreen',
+              'businessName: ${businessFormData.businessName}');
+          Logger.d(
+              'OnboardingScreen', 'username: ${businessFormData.username}');
+          Logger.d('OnboardingScreen',
+              'establishedDate: ${businessFormData.establishedDate}');
+          Logger.d('OnboardingScreen',
+              'phoneNumber: ${businessFormData.phoneNumber}');
+          Logger.d('OnboardingScreen',
+              'profileImageUrl: ${businessFormData.profileImageUrl}');
+          Logger.d('OnboardingScreen',
+              'businessTypes: ${businessFormData.businessTypes}');
           throw Exception('Please complete all steps');
         }
       } else {
@@ -235,7 +307,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       final firebaseService = ref.read(firebaseServiceProvider);
       final authState = ref.read(authProvider);
 
-      if (!authState.isLoading) {
+      if (FirebaseAuth.instance.currentUser == null) {
         throw Exception('No user found');
       }
 
@@ -291,12 +363,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         throw Exception('Failed to save to Firebase: $e');
       }
 
-      Logger.d('OnboardingScreen', 'Successfully saved to both Firebase and Hive');
+      Logger.d(
+          'OnboardingScreen', 'Successfully saved to both Firebase and Hive');
 
       // Set onboardingCompleted to true in the form data
       ref.read(onboardingFormProvider.notifier).setOnboardingCompleted(true);
       if (isBusiness && businessFormData != null) {
-        ref.read(businessOnboardingFormProvider.notifier).setOnboardingCompleted(true);
+        ref
+            .read(businessOnboardingFormProvider.notifier)
+            .setOnboardingCompleted(true);
       }
 
       // Get the updated form data with onboardingCompleted = true
@@ -342,7 +417,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   void _updateValidityState(String field, bool value) {
     if (!mounted) return;
 
-    Logger.d('OnboardingScreen', '_updateValidityState called with field: $field, value: $value');
+    Logger.d('OnboardingScreen',
+        '_updateValidityState called with field: $field, value: $value');
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -351,7 +427,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         switch (field) {
           case 'displayName':
             _isDisplayNameValid = value;
-            Logger.d('OnboardingScreen', '_isDisplayNameValid updated to: $value');
+            Logger.d(
+                'OnboardingScreen', '_isDisplayNameValid updated to: $value');
             break;
           case 'phone':
             _isPhoneValid = value;
@@ -359,7 +436,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             break;
           case 'profileImage':
             _isProfileImageValid = value;
-            Logger.d('OnboardingScreen', '_isProfileImageValid updated to: $value');
+            Logger.d(
+                'OnboardingScreen', '_isProfileImageValid updated to: $value');
             break;
         }
       });
@@ -374,30 +452,42 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
     // Debug log the current form data on each build
     Logger.d('OnboardingScreen', 'Build - Current page: $_currentPage');
-    Logger.d('OnboardingScreen', 'Build - Account Type: ${formData.accountType}');
-    Logger.d('OnboardingScreen', 'Build - Display Name: ${formData.displayName}');
+    Logger.d(
+        'OnboardingScreen', 'Build - Account Type: ${formData.accountType}');
+    Logger.d(
+        'OnboardingScreen', 'Build - Display Name: ${formData.displayName}');
     Logger.d('OnboardingScreen', 'Build - Username: ${formData.username}');
     Logger.d('OnboardingScreen', 'Build - Birthday: ${formData.birthday}');
-    Logger.d('OnboardingScreen', 'Build - Phone Number: ${formData.phoneNumber}');
-    Logger.d('OnboardingScreen', 'Build - Profile Image: ${formData.profileImageUrl}');
+    Logger.d(
+        'OnboardingScreen', 'Build - Phone Number: ${formData.phoneNumber}');
+    Logger.d('OnboardingScreen',
+        'Build - Profile Image: ${formData.profileImageUrl}');
     Logger.d('OnboardingScreen', 'Build - Interests: ${formData.interests}');
 
     // Check if the account type is set and we're on the first page
-    if (_currentPage == 0 && formData.accountType != null && formData.accountType!.isNotEmpty) {
-      Logger.d('OnboardingScreen', 'Account type is set on page 0: ${formData.accountType}');
+    if (_currentPage == 0 &&
+        formData.accountType != null &&
+        formData.accountType!.isNotEmpty) {
+      Logger.d('OnboardingScreen',
+          'Account type is set on page 0: ${formData.accountType}');
     }
 
     // Check if the display name and username are set and we're on the second page
     if (_currentPage == 1) {
-      Logger.d('OnboardingScreen', 'On display name page - Display name: ${formData.displayName}');
-      Logger.d('OnboardingScreen', 'On display name page - Username: ${formData.username}');
-      Logger.d('OnboardingScreen', 'On display name page - _isDisplayNameValid: $_isDisplayNameValid');
+      Logger.d('OnboardingScreen',
+          'On display name page - Display name: ${formData.displayName}');
+      Logger.d('OnboardingScreen',
+          'On display name page - Username: ${formData.username}');
+      Logger.d('OnboardingScreen',
+          'On display name page - _isDisplayNameValid: $_isDisplayNameValid');
     }
 
     // Check if the phone number is set and we're on the fourth page
     if (_currentPage == 3) {
-      Logger.d('OnboardingScreen', 'On phone page - Phone number: ${formData.phoneNumber}');
-      Logger.d('OnboardingScreen', 'On phone page - _isPhoneValid: $_isPhoneValid');
+      Logger.d('OnboardingScreen',
+          'On phone page - Phone number: ${formData.phoneNumber}');
+      Logger.d(
+          'OnboardingScreen', 'On phone page - _isPhoneValid: $_isPhoneValid');
     }
 
     // Watch theme provider for changes
@@ -416,17 +506,27 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         totalSteps: _totalPages,
         isNextEnabled: _isNextButtonEnabled(),
         onNext: () {
-          Logger.d('OnboardingScreen', 'onNext button pressed on page $_currentPage');
-          Logger.d('OnboardingScreen', '_isDisplayNameValid: $_isDisplayNameValid');
+          Logger.d('OnboardingScreen',
+              'onNext button pressed on page $_currentPage');
+          Logger.d(
+              'OnboardingScreen', '_isDisplayNameValid: $_isDisplayNameValid');
           Logger.d('OnboardingScreen', '_isPhoneValid: $_isPhoneValid');
-          Logger.d('OnboardingScreen', '_isProfileImageValid: $_isProfileImageValid');
-          Logger.d('OnboardingScreen', 'formData.accountType: ${formData.accountType}');
-          Logger.d('OnboardingScreen', 'formData.displayName: ${formData.displayName}');
-          Logger.d('OnboardingScreen', 'formData.username: ${formData.username}');
-          Logger.d('OnboardingScreen', 'formData.birthday: ${formData.birthday}');
-          Logger.d('OnboardingScreen', 'formData.phoneNumber: ${formData.phoneNumber}');
-          Logger.d('OnboardingScreen', 'formData.profileImageUrl: ${formData.profileImageUrl}');
-          Logger.d('OnboardingScreen', 'formData.interests: ${formData.interests}');
+          Logger.d('OnboardingScreen',
+              '_isProfileImageValid: $_isProfileImageValid');
+          Logger.d('OnboardingScreen',
+              'formData.accountType: ${formData.accountType}');
+          Logger.d('OnboardingScreen',
+              'formData.displayName: ${formData.displayName}');
+          Logger.d(
+              'OnboardingScreen', 'formData.username: ${formData.username}');
+          Logger.d(
+              'OnboardingScreen', 'formData.birthday: ${formData.birthday}');
+          Logger.d('OnboardingScreen',
+              'formData.phoneNumber: ${formData.phoneNumber}');
+          Logger.d('OnboardingScreen',
+              'formData.profileImageUrl: ${formData.profileImageUrl}');
+          Logger.d(
+              'OnboardingScreen', 'formData.interests: ${formData.interests}');
 
           // If we're already submitting, don't do anything
           if (_isSubmitting) {
@@ -434,14 +534,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           }
 
           if (_currentPage == 0) {
-            if (formData.accountType != null && formData.accountType!.isNotEmpty) {
+            if (formData.accountType != null &&
+                formData.accountType!.isNotEmpty) {
               _nextPage();
             }
           } else if (_currentPage == 1) {
             // For display name step, check if the data is valid and move to the next page
             if (_isDisplayNameValid &&
-                formData.displayName != null && formData.displayName!.isNotEmpty &&
-                formData.username != null && formData.username!.isNotEmpty) {
+                formData.displayName != null &&
+                formData.displayName!.isNotEmpty &&
+                formData.username != null &&
+                formData.username!.isNotEmpty) {
               _nextPage();
             }
           } else if (_currentPage == 2) {
@@ -451,7 +554,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           } else if (_currentPage == 3) {
             // For phone step, check if the data is valid and move to the next page
             if (_isPhoneValid &&
-                formData.phoneNumber != null && formData.phoneNumber!.isNotEmpty) {
+                formData.phoneNumber != null &&
+                formData.phoneNumber!.isNotEmpty) {
               _nextPage();
             }
           } else if (_currentPage == 4) {
@@ -460,7 +564,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             }
           } else if (_currentPage == 5) {
             if (formData.interests != null && formData.interests!.isNotEmpty) {
-              _submitOnboarding();
+              if (formData.accountType == 'business') {
+                _showBusinessAccountAlertAndSubmit(); // <-- show dialog for business
+              } else {
+                _submitOnboarding(); // <-- submit directly for personal
+              }
             }
           }
         },
@@ -554,7 +662,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         // Use BusinessTypeStep for business accounts, InterestsStep for personal accounts
         return isBusiness
             ? BusinessTypeStep(
-                onNext: _submitOnboarding,
+                onNext: _showBusinessAccountAlertAndSubmit,
                 onBack: _previousPage,
               )
             : InterestsStep(
@@ -576,15 +684,25 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       case 0:
         return 'Choose Account Type';
       case 1:
-        return isBusiness ? 'What\'s the name of your Business?' : 'Create Your Profile';
+        return isBusiness
+            ? 'What\'s the name of your Business?'
+            : 'Create Your Profile';
       case 2:
-        return isBusiness ? 'When was your business established?' : 'When Were You Born?';
+        return isBusiness
+            ? 'When was your business established?'
+            : 'When Were You Born?';
       case 3:
-        return isBusiness ? 'What\'s the primary number to your business?' : 'Verify Your Phone';
+        return isBusiness
+            ? 'What\'s the primary number to your business?'
+            : 'Verify Your Phone';
       case 4:
-        return isBusiness ? 'Upload an image to represent your business' : 'Add Profile Picture';
+        return isBusiness
+            ? 'Upload an image to represent your business'
+            : 'Add Profile Picture';
       case 5:
-        return isBusiness ? 'What services do you offer?' : 'Select Your Interests';
+        return isBusiness
+            ? 'What services do you offer?'
+            : 'Select Your Interests';
       default:
         return '';
     }
@@ -596,7 +714,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final isBusiness = accountType == 'business';
 
     // For business accounts, we need to check the business form provider for some steps
-    final businessFormData = isBusiness ? ref.read(businessOnboardingFormProvider) : null;
+    final businessFormData =
+        isBusiness ? ref.read(businessOnboardingFormProvider) : null;
 
     switch (_currentPage) {
       case 0: // Account Type Step
@@ -615,7 +734,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         return _isProfileImageValid;
       case 5: // Interests Step (personal) or Business Type Step (business)
         if (isBusiness) {
-          return businessFormData?.businessTypes != null && businessFormData!.businessTypes!.isNotEmpty;
+          return businessFormData?.businessTypes != null &&
+              businessFormData!.businessTypes!.isNotEmpty;
         } else {
           return formData.interests != null && formData.interests!.isNotEmpty;
         }
@@ -623,6 +743,4 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         return false;
     }
   }
-
-
 }

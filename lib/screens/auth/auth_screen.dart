@@ -245,7 +245,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeProvider);
-    final isDark = themeMode == ThemeMode.dark;
+    final brightness = MediaQuery.of(context).platformBrightness;
+    final isDark = themeMode == ThemeMode.dark ||
+        (themeMode == ThemeMode.system && brightness == Brightness.dark);
 
     return AuthPageTemplate(
       title: "First Let's\nSign-In to Verify\nYour Account",
