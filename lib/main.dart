@@ -159,7 +159,6 @@ class _MyAppState extends ConsumerState<MyApp> {
   String? _error;
   bool _isSyncing = false;
   bool _hasSyncedThisSession = false;
-  bool _isOffline = false; // Track offline status
 
   late StreamSubscription<ConnectivityResult> _connectivitySubscription;
 
@@ -170,7 +169,6 @@ class _MyAppState extends ConsumerState<MyApp> {
     // Monitor connectivity changes
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
       setState(() {
-        _isOffline = result == ConnectivityResult.none;
       });
     });
 
