@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:yetuga/widgets/version_nag_banner.dart';
 
 import '../models/event_model.dart';
 import '../models/onboarding_data.dart';
@@ -595,7 +596,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               onFilterChanged: _handleFilterChanged,
               currentFilter: _currentFilter,
             ),
-
+            // Version nag banner
+            const VersionNagBanner(),
             // Main content area with swipe support
             Expanded(
               child: PageView.builder(
