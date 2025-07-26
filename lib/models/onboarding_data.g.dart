@@ -24,7 +24,7 @@ class OnboardingDataAdapter extends TypeAdapter<OnboardingData> {
       ..profileImageUrl = fields[4] as String?
       ..interests = (fields[5] as List?)?.cast<String>()
       ..username = fields[6] as String?
-      ..onboardingCompleted = fields[7] as bool? ?? false;
+      ..onboardingCompleted = fields[7] as bool;
   }
 
   @override

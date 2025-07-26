@@ -1,6 +1,7 @@
 {
   "projects": {
-    "development": "yetuga-1d0d9"
+    "development": "yetuga-1d0d9",
+    "default": "yetuga-1d0d9"
   },
   "targets": {},
   "etags": {}

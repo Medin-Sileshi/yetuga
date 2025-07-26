@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
+import '../models/business_onboarding_data.dart';
 import '../models/onboarding_data.dart';
 import '../utils/logger.dart';
 import 'firebase_service.dart';
@@ -149,7 +150,7 @@ class StorageService {
   // New method to sync data with Firebase
   Future<OnboardingData?> syncWithFirebase(String userId) async {
     try {
-      Logger.d('StorageService', 'StorageService: Syncing with Firebase for user: $userId');
+      Logger.d('StorageService', 'StorageService: Syncing with Databse for user: $userId');
 
       // Get user profile from Firebase
       final userProfile = await _firebaseService.getUserProfile();
@@ -166,15 +167,30 @@ class StorageService {
       Logger.d('StorageService', 'StorageService: onboardingCompleted in Firebase: $onboardingCompleted');
 
       // Convert Firebase data to OnboardingData
-      final onboardingData = OnboardingData()
-        ..accountType = userProfile['accountType']
-        ..displayName = userProfile['displayName']
-        ..username = userProfile['username']
-        ..birthday = userProfile['birthday']?.toDate() // Convert Timestamp to DateTime
-        ..phoneNumber = userProfile['phoneNumber']
-        ..profileImageUrl = userProfile['profileImageUrl']
-        ..interests = List<String>.from(userProfile['interests'] ?? [])
-        ..onboardingCompleted = onboardingCompleted;
+      OnboardingData onboardingData;
+      if (userProfile['accountType'] == 'business') {
+        onboardingData = BusinessOnboardingData(
+          accountType: userProfile['accountType'],
+          businessName: userProfile['businessName'],
+          username: userProfile['username'],
+          establishedDate: userProfile['establishedDate']?.toDate(),
+          phoneNumber: userProfile['phoneNumber'],
+          profileImageUrl: userProfile['profileImageUrl'],
+          businessTypes: List<String>.from(userProfile['businessTypes'] ?? []),
+          onboardingCompleted: onboardingCompleted,
+          verified: userProfile['verified'] ?? false,
+        );
+      } else {
+        onboardingData = OnboardingData()
+          ..accountType = userProfile['accountType']
+          ..displayName = userProfile['displayName']
+          ..username = userProfile['username']
+          ..birthday = userProfile['birthday']?.toDate() // Convert Timestamp to DateTime
+          ..phoneNumber = userProfile['phoneNumber']
+          ..profileImageUrl = userProfile['profileImageUrl']
+          ..interests = List<String>.from(userProfile['interests'] ?? [])
+          ..onboardingCompleted = onboardingCompleted;
+      }
 
       // Save the synced data to Hive
       await _onboardingBox?.put(userId, onboardingData);

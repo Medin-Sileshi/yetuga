@@ -38,6 +38,7 @@
                 <!-- Replace 'yetuga' with your exact scheme if necessary -->
                 <data android:scheme="yetuga" android:host="profile" />
                 <data android:scheme="yetuga" android:host="event" />
+                <data android:scheme="yetuga" android:host="business-verificaiton" />
             </intent-filter>
         </activity>
         <!-- Add the UCropActivity declaration -->
