@@ -1249,25 +1249,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return false;
   }
 
-  bool _isBusinessVerified(User? user, OnboardingData? onboardingData) {
-    if (user != null && onboardingData != null) {
-      // This pattern is more robust if the provider doesn't return the specific subtype.
-      // It tries to access the 'verified' property dynamically.
-      try {
-        final dynamic data = onboardingData;
-        // Check if the 'verified' property exists and is true.
-        if (data.verified != null) {
-          return data.verified == true;
-        }
-      } catch (e) {
-        // This catch block will handle cases where 'onboardingData' doesn't have a 'verified' property.
-        Logger.d('HomeScreen',
-            'Could not access "verified" property on onboardingData: $e');
-      }
-    }
-    // If any of the conditions are not met, they are not a verified business.
-    return false;
-  }
 
   // Helper method to get user profile image widget
   Widget _getUserProfileImage(User? user, OnboardingData? onboardingData) {

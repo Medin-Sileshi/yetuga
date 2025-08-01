@@ -8,9 +8,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 import '../../models/event_model.dart';
-import '../../models/onboarding_data.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/onboarding_provider.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/firebase_provider.dart';
 import '../../providers/user_cache_provider.dart';
