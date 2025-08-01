@@ -63,6 +63,7 @@ dependencies:
   firebase_app_check: ^0.3.2+7
   chapasdk: ^0.0.8+1
   chapa_unofficial: ^0.0.5
+  webview_flutter: ^4.8.0
 
 dev_dependencies:
   flutter_test:

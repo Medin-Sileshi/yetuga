@@ -37,8 +37,6 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-
-
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   String _currentFilter = "NEW"; // Default filter
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -63,9 +61,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     // Initialize the page controller with the correct initial page
     final initialIndex = _filters.indexOf(_currentFilter);
-    _pageController = PageController(initialPage: initialIndex != -1 ? initialIndex : 1, keepPage: true);
+    _pageController = PageController(
+        initialPage: initialIndex != -1 ? initialIndex : 1, keepPage: true);
 
-    Logger.d('HomeScreen', 'Initialized PageController with initial page: ${initialIndex != -1 ? initialIndex : 1}');
+    Logger.d('HomeScreen',
+        'Initialized PageController with initial page: ${initialIndex != -1 ? initialIndex : 1}');
 
     // Add post-frame callback to ensure the page controller is properly initialized
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -97,7 +97,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // Check if we need to refresh events and do so if needed
   Future<void> _checkAndRefreshEvents() async {
-
     try {
       final eventService = ref.read(eventServiceProvider);
 
@@ -140,7 +139,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (_lastRefreshTime != null) {
       final timeSinceLastRefresh = now.difference(_lastRefreshTime!);
       if (timeSinceLastRefresh.inSeconds < 3) {
-        Logger.d('HomeScreen', 'Refresh requested too soon (${timeSinceLastRefresh.inMilliseconds}ms since last refresh), ignoring');
+        Logger.d('HomeScreen',
+            'Refresh requested too soon (${timeSinceLastRefresh.inMilliseconds}ms since last refresh), ignoring');
         return;
       }
     }
@@ -150,7 +150,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _lastRefreshTime = now;
 
     try {
-      Logger.d('HomeScreen', 'Manually refreshing events for filter: $_currentFilter');
+      Logger.d('HomeScreen',
+          'Manually refreshing events for filter: $_currentFilter');
 
       // Get the event service
       final eventService = ref.read(eventServiceProvider);
@@ -158,7 +159,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // Get the RSVP service to check for invitations
       final rsvpService = ref.read(rsvpServiceProvider);
       final invitations = await rsvpService.getRSVPs().first;
-      Logger.d('HomeScreen', 'Found ${invitations.length} invitations during manual refresh');
+      Logger.d('HomeScreen',
+          'Found ${invitations.length} invitations during manual refresh');
 
       // Refresh events
       await _refreshEvents(_currentFilter, eventService);
@@ -210,8 +212,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-
-
   // No need for a card controller with our custom implementation
 
   @override
@@ -233,7 +233,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _handleFilterChanged(String filter) {
     // Prevent infinite loop
     if (_isChangingPage) {
-      Logger.d('HomeScreen', 'Ignoring filter change to $filter because page is already changing');
+      Logger.d('HomeScreen',
+          'Ignoring filter change to $filter because page is already changing');
       return;
     }
 
@@ -243,7 +244,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return;
     }
 
-    Logger.d('HomeScreen', 'Handling filter change from $_currentFilter to $filter');
+    Logger.d(
+        'HomeScreen', 'Handling filter change from $_currentFilter to $filter');
 
     setState(() {
       _currentFilter = filter;
@@ -255,11 +257,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (_pageController.hasClients) {
         Logger.d('HomeScreen', 'Animating to page $index for filter $filter');
         _isChangingPage = true;
-        _pageController.animateToPage(
+        _pageController
+            .animateToPage(
           index,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
-        ).then((_) {
+        )
+            .then((_) {
           // Reset the flag after animation completes
           if (mounted) {
             setState(() {
@@ -281,7 +285,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         // If the controller doesn't have clients yet, we'll update it when it does
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && _pageController.hasClients) {
-            Logger.d('HomeScreen', 'Delayed animation to page $index for filter $filter');
+            Logger.d('HomeScreen',
+                'Delayed animation to page $index for filter $filter');
             _pageController.jumpToPage(index);
           }
         });
@@ -372,7 +377,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           _eventsCache.clear();
           _lastDocuments.clear();
           _hasMoreEvents.clear();
-          Logger.d('HomeScreen', 'Cleared all event cache entries in HomeScreen');
+          Logger.d(
+              'HomeScreen', 'Cleared all event cache entries in HomeScreen');
         } catch (e) {
           Logger.e('HomeScreen', 'Error clearing event cache entries', e);
         }
@@ -408,271 +414,281 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  // Check if the user is verified
+  Future<bool> _isUserVerified(String userId) async {
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+      if (userDoc.exists) {
+        return userDoc.data()?['verified'] ?? false;
+      }
+      return false;
+    } catch (e) {
+      Logger.e('HomeScreen', 'Error checking user verification status', e);
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
-    final onboardingDataAsync = ref.watch(onboardingProvider);
+    final isBusinessAccount = _isBusinessAccount(user, ref.read(onboardingProvider).value);
 
-    // Get onboarding data for profile image
-    OnboardingData? onboardingData;
-    onboardingDataAsync.whenData((data) {
-      onboardingData = data;
-    });
+    return FutureBuilder<bool>(
+      future: user != null ? _isUserVerified(user.uid) : Future.value(false),
+      builder: (context, snapshot) {
+        final isVerified = snapshot.data ?? false;
 
-    return Scaffold(
-      key: _scaffoldKey,
-      // Use theme's background color instead of hardcoding it
-
-      drawer: Drawer(
-        // Use the same background color as the rest of the app
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              // Custom drawer header with close button
-              Container(
-                height: 200,
-                color: const Color(0xFF0A2942), // Fixed color for both light and dark themes
-                child: Stack(
-                  children: [
-                    // Close button
-                    Positioned(
-                      top: 10,
-                      right: 10,
-                      child: IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ),
-                    // User profile section
-                    Padding(
-                      padding: const EdgeInsets.only(top: 50, left: 16),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // Profile picture with border
-                          Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                // Golden border for business accounts, secondary color for personal
-                                color: _isBusinessAccount(user, onboardingData)
-                                  ? const Color(0xFFFFD700) // Gold color
-                                  : Theme.of(context).colorScheme.secondary,
-                                width: 3,
-                              ),
-                              // Add glow effect for business accounts
-                              boxShadow: _isBusinessAccount(user, onboardingData)
-                                ? [
-                                    BoxShadow(
-                                      color: const Color(0xFFFFD700).withAlpha(128), // 0.5 opacity
-                                      blurRadius: 10,
-                                      spreadRadius: 2,
-                                    )
-                                  ]
-                                : null,
-                            ),
-                            child: CircleAvatar(
-                              radius: 40,
-                              backgroundColor: Colors.grey[300],
-                              child: _getUserProfileImage(user, onboardingData),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          // User info
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  _getUserDisplayName(user, onboardingData),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  '@${_getUserUsername(user, onboardingData)}',
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 16,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            // Profile button
-            ListTile(
-              leading: Icon(Icons.account_circle, color: Theme.of(context).iconTheme.color),
-              title: Text('Profile', style: Theme.of(context).textTheme.titleMedium),
-              onTap: () {
-                Navigator.pop(context); // Close drawer
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ProfileScreen(),
-                  ),
-                );
-              },
-            ),
-            // Notifications button with badge
-            StreamBuilder<int>(
-              stream: ref.read(notificationServiceProvider).getUnreadCount(),
-              builder: (context, snapshot) {
-                final unreadCount = snapshot.data ?? 0;
-
-                return ListTile(
-                  leading: Stack(
-                    clipBehavior: Clip.none,
+        return Scaffold(
+          key: _scaffoldKey,
+          drawer: Drawer(
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                Container(
+                  height: 200,
+                  color: const Color(0xFF0A2942),
+                  child: Stack(
                     children: [
-                      Icon(Icons.notifications, color: Theme.of(context).iconTheme.color),
-                      if (unreadCount > 0)
-                        Positioned(
-                          // Position the badge to overlap with the icon
-                          right: 5,
-                          top: 5,
-                          child: NotificationBadge(
-                            count: unreadCount,
-                            size: 8.0,
-                          ),
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
                         ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 50, left: 16),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isBusinessAccount
+                                      ? const Color(0xFFFFD700)
+                                      : Theme.of(context).colorScheme.secondary,
+                                  width: 3,
+                                ),
+                                boxShadow: isBusinessAccount
+                                    ? [
+                                        BoxShadow(
+                                          color: const Color(0xFFFFD700)
+                                              .withAlpha(128),
+                                          blurRadius: 10,
+                                          spreadRadius: 2,
+                                        )
+                                      ]
+                                    : null,
+                              ),
+                              child: CircleAvatar(
+                                radius: 40,
+                                backgroundColor: Colors.grey[300],
+                                child: _getUserProfileImage(user, null),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          _getUserDisplayName(user, null),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (isVerified)
+                                        const Padding(
+                                          padding: EdgeInsets.only(left: 8.0),
+                                          child: Icon(Icons.verified,
+                                              color: Colors.blue, size: 20),
+                                        ),
+                                    ],
+                                  ),
+                                  Text(
+                                    '@${_getUserUsername(user, null)}',
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 16,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                  title: Text('Notifications', style: Theme.of(context).textTheme.titleMedium),
+                ),
+                ListTile(
+                  leading: Icon(Icons.account_circle,
+                      color: Theme.of(context).iconTheme.color),
+                  title: Text('Profile',
+                      style: Theme.of(context).textTheme.titleMedium),
                   onTap: () {
-                    Navigator.pop(context); // Close drawer
+                    Navigator.pop(context);
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const NotificationsScreen(),
+                        builder: (context) => const ProfileScreen(),
                       ),
                     );
                   },
-                );
-              },
+                ),
+                StreamBuilder<int>(
+                  stream:
+                      ref.read(notificationServiceProvider).getUnreadCount(),
+                  builder: (context, snapshot) {
+                    final unreadCount = snapshot.data ?? 0;
+                    return ListTile(
+                      leading: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Icon(Icons.notifications,
+                              color: Theme.of(context).iconTheme.color),
+                          if (unreadCount > 0)
+                            Positioned(
+                              right: 5,
+                              top: 5,
+                              child: NotificationBadge(
+                                count: unreadCount,
+                                size: 8.0,
+                              ),
+                            ),
+                        ],
+                      ),
+                      title: Text('Notifications',
+                          style: Theme.of(context).textTheme.titleMedium),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const NotificationsScreen(),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.settings,
+                      color: Theme.of(context).iconTheme.color),
+                  title: Text('Settings',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ThemeSettingsScreen(),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.logout,
+                      color: Theme.of(context).iconTheme.color),
+                  title: Text('Sign Out',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _handleSignOut(context);
+                  },
+                ),
+              ],
             ),
-            // Settings button
-            ListTile(
-              leading: Icon(Icons.settings, color: Theme.of(context).iconTheme.color),
-              title: Text('Settings', style: Theme.of(context).textTheme.titleMedium),
-              onTap: () {
-                Navigator.pop(context); // Close drawer
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ThemeSettingsScreen(),
+          ),
+          body: SafeArea(
+            child: Column(
+              children: [
+                HomeHeader(
+                  onMenuPressed: _handleMenuPressed,
+                  onScanPressed: _handleScanPressed,
+                  onFilterChanged: _handleFilterChanged,
+                  currentFilter: _currentFilter,
+                ),
+                const VersionNagBanner(),
+                Expanded(
+                  child: PageView.builder(
+                    controller: _pageController,
+                    itemCount: _filters.length,
+                    onPageChanged: (index) {
+                      if (!_isChangingPage) {
+                        _handleFilterChanged(_getFilterName(index));
+                      }
+                    },
+                    itemBuilder: (context, index) {
+                      return KeyedSubtree(
+                        key: ValueKey('page_${_filters[index]}'),
+                        child: _buildFilteredContent(_filters[index]),
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+              ],
             ),
-            ListTile(
-              leading: Icon(Icons.logout, color: Theme.of(context).iconTheme.color),
-              title: Text('Sign Out', style: Theme.of(context).textTheme.titleMedium),
-              onTap: () {
-                Navigator.pop(context); // Close drawer
-                _handleSignOut(context);
-              },
-            ),
-          ],
-        ),
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Custom header with filter tabs
-            HomeHeader(
-              onMenuPressed: _handleMenuPressed,
-              onScanPressed: _handleScanPressed,
-              onFilterChanged: _handleFilterChanged,
-              currentFilter: _currentFilter,
-            ),
-            // Version nag banner
-            const VersionNagBanner(),
-            // Main content area with swipe support
-            Expanded(
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: _filters.length,
-                onPageChanged: (index) {
-                  // Only handle page change if it wasn't triggered by filter change
-                  if (!_isChangingPage) {
-                    _handleFilterChanged(_getFilterName(index));
-                  }
-                },
-                itemBuilder: (context, index) {
-                  // Use a key to ensure each page is uniquely identified
-                  return KeyedSubtree(
-                    key: ValueKey('page_${_filters[index]}'),
-                    child: _buildFilteredContent(_filters[index]),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-
-      // Search floating action button at bottom left
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(left: 30),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            // Search button at bottom left
-            FloatingActionButton(
-              heroTag: 'search_fab',
-              onPressed: () {
-                // Navigate to the search screen
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const SearchScreen(),
+          ),
+          floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+          floatingActionButton: Padding(
+            padding: const EdgeInsets.only(left: 30),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                FloatingActionButton(
+                  heroTag: 'search_fab',
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const SearchScreen(),
+                      ),
+                    );
+                  },
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  mini: true,
+                  child: Icon(
+                    Icons.search,
+                    color: Theme.of(context).iconTheme.color,
+                    size: 30,
                   ),
-                );
-              },
-              // Make it look like a simple icon button
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              mini: true,
-              child: Icon(
-                Icons.search,
-                color: Theme.of(context).iconTheme.color,
-                size: 30,
-              ),
+                ),
+                FloatingActionButton(
+                  heroTag: 'add_fab',
+                  onPressed: () {
+                    _showCreateEventSheet(context);
+                  },
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  mini: true,
+                  child: Icon(
+                    Icons.add,
+                    color: Theme.of(context).iconTheme.color,
+                    size: 30,
+                  ),
+                ),
+              ],
             ),
-
-
-
-            // Add button at bottom right
-            FloatingActionButton(
-              heroTag: 'add_fab',
-              onPressed: () {
-                // Show the create event bottom sheet
-                _showCreateEventSheet(context);
-              },
-              // Make it look like a simple icon button
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              mini: true,
-              child: Icon(
-                Icons.add,
-                color: Theme.of(context).iconTheme.color,
-                size: 30,
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -688,7 +704,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     try {
       // Ensure filter is valid
       if (filter.isEmpty || !_filters.contains(filter)) {
-        Logger.e('HomeScreen', 'Invalid filter provided: $filter, defaulting to NEW');
+        Logger.e('HomeScreen',
+            'Invalid filter provided: $filter, defaulting to NEW');
         filter = 'NEW';
       }
 
@@ -696,7 +713,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final user = ref.watch(currentUserProvider);
 
       // Log authentication status
-      Logger.d('HomeScreen', 'Building filtered content for filter: $filter, user authenticated: ${user != null}');
+      Logger.d('HomeScreen',
+          'Building filtered content for filter: $filter, user authenticated: ${user != null}');
       if (user != null) {
         Logger.d('HomeScreen', 'User ID: ${user.uid}');
       }
@@ -708,218 +726,243 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         Logger.d('HomeScreen', 'Initialized cache for filter: $filter');
       }
 
-    // Use a key to ensure the StreamBuilder is recreated when the filter changes
-    // This prevents issues with stale streams
-    // Include a timestamp to force recreation on each build
-    final streamBuilderKey = ValueKey('stream_${filter}_${DateTime.now().millisecondsSinceEpoch}');
+      // Use a key to ensure the StreamBuilder is recreated when the filter changes
+      // This prevents issues with stale streams
+      // Include a timestamp to force recreation on each build
+      final streamBuilderKey =
+          ValueKey('stream_${filter}_${DateTime.now().millisecondsSinceEpoch}');
 
-    return StreamBuilder<List<EventModel>>(
-      key: streamBuilderKey,
-      // Only check authentication for JOINED filter, allow other filters to work without auth
-      stream: (filter == 'JOINED' && !_isUserAuthenticated())
-          ? Stream.value([])
-          : _getFilteredEventsStream(filter, eventService),
-      builder: (context, snapshot) {
-        // Log the snapshot state
-        Logger.d('HomeScreen', 'StreamBuilder for filter: $filter, state: ${snapshot.connectionState}');
-        if (snapshot.hasData) {
-          Logger.d('HomeScreen', 'StreamBuilder has data: ${snapshot.data!.length} events');
-        }
-        if (snapshot.hasError) {
-          Logger.e('HomeScreen', 'StreamBuilder error for filter: $filter', snapshot.error);
-          if (snapshot.error is Error) {
-            Logger.e('HomeScreen', 'Stack trace:', (snapshot.error as Error).stackTrace);
+      return StreamBuilder<List<EventModel>>(
+        key: streamBuilderKey,
+        // Only check authentication for JOINED filter, allow other filters to work without auth
+        stream: (filter == 'JOINED' && !_isUserAuthenticated())
+            ? Stream.value([])
+            : _getFilteredEventsStream(filter, eventService),
+        builder: (context, snapshot) {
+          // Log the snapshot state
+          Logger.d('HomeScreen',
+              'StreamBuilder for filter: $filter, state: ${snapshot.connectionState}');
+          if (snapshot.hasData) {
+            Logger.d('HomeScreen',
+                'StreamBuilder has data: ${snapshot.data!.length} events');
           }
-        }
+          if (snapshot.hasError) {
+            Logger.e('HomeScreen', 'StreamBuilder error for filter: $filter',
+                snapshot.error);
+            if (snapshot.error is Error) {
+              Logger.e('HomeScreen', 'Stack trace:',
+                  (snapshot.error as Error).stackTrace);
+            }
+          }
 
-        if (snapshot.connectionState == ConnectionState.waiting && _eventsCache[filter]!.isEmpty) {
-          Logger.d('HomeScreen', 'Showing loading indicator for filter: $filter');
-          return const Center(child: CircularProgressIndicator());
-        }
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              _eventsCache[filter]!.isEmpty) {
+            Logger.d(
+                'HomeScreen', 'Showing loading indicator for filter: $filter');
+            return const Center(child: CircularProgressIndicator());
+          }
 
-        // If we have a done state with no data and empty cache, try to refresh
-        if (snapshot.connectionState == ConnectionState.done &&
-            !snapshot.hasData &&
-            _eventsCache[filter]!.isEmpty) {
-          Logger.d('HomeScreen', 'Stream completed with no data, triggering refresh for: $filter');
-          // Schedule a refresh after the build completes
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _refreshEvents(filter, eventService);
-          });
-        }
+          // If we have a done state with no data and empty cache, try to refresh
+          if (snapshot.connectionState == ConnectionState.done &&
+              !snapshot.hasData &&
+              _eventsCache[filter]!.isEmpty) {
+            Logger.d('HomeScreen',
+                'Stream completed with no data, triggering refresh for: $filter');
+            // Schedule a refresh after the build completes
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _refreshEvents(filter, eventService);
+            });
+          }
 
-        if (snapshot.hasError && _eventsCache[filter]!.isEmpty) {
-          Logger.e('HomeScreen', 'Showing error UI for filter: $filter');
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error_outline, size: 48, color: Theme.of(context).colorScheme.error),
-                const SizedBox(height: 16),
-                Text(
-                  'Error loading events',
-                  style: TextStyle(
-                    color: Theme.of(context).textTheme.bodyLarge?.color,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+          if (snapshot.hasError && _eventsCache[filter]!.isEmpty) {
+            Logger.e('HomeScreen', 'Showing error UI for filter: $filter');
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline,
+                      size: 48, color: Theme.of(context).colorScheme.error),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error loading events',
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  snapshot.error.toString(),
-                  style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => _refreshEvents(filter, eventService),
-                  child: const Text('Try Again'),
-                ),
-              ],
-            ),
-          );
-        }
+                  const SizedBox(height: 8),
+                  Text(
+                    snapshot.error.toString(),
+                    style: TextStyle(
+                        color: Theme.of(context).textTheme.bodyMedium?.color),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => _refreshEvents(filter, eventService),
+                    child: const Text('Try Again'),
+                  ),
+                ],
+              ),
+            );
+          }
 
-        // Update cache with new data
-        if (snapshot.hasData) {
-          final newEvents = snapshot.data ?? [];
-          Logger.d('HomeScreen', 'Received ${newEvents.length} events for filter: $filter');
+          // Update cache with new data
+          if (snapshot.hasData) {
+            final newEvents = snapshot.data ?? [];
+            Logger.d('HomeScreen',
+                'Received ${newEvents.length} events for filter: $filter');
 
-          if (newEvents.isNotEmpty) {
-            // Store the last event ID for pagination
-            final lastEvent = newEvents.last;
-            // Store the last document ID for pagination
-            _updateLastDocument(filter, lastEvent.id);
-            Logger.d('HomeScreen', 'Updated last document for filter: $filter, ID: ${lastEvent.id}');
+            if (newEvents.isNotEmpty) {
+              // Store the last event ID for pagination
+              final lastEvent = newEvents.last;
+              // Store the last document ID for pagination
+              _updateLastDocument(filter, lastEvent.id);
+              Logger.d('HomeScreen',
+                  'Updated last document for filter: $filter, ID: ${lastEvent.id}');
 
-            // If we got fewer events than requested, there are no more to load
-            if (newEvents.length < _eventsPerPage) {
+              // If we got fewer events than requested, there are no more to load
+              if (newEvents.length < _eventsPerPage) {
+                _hasMoreEvents[filter] = false;
+                Logger.d('HomeScreen', 'No more events for filter: $filter');
+              } else {
+                _hasMoreEvents[filter] = true;
+                Logger.d(
+                    'HomeScreen', 'More events available for filter: $filter');
+              }
+
+              // Update the cache with improved duplicate detection
+              if (_eventsCache[filter]!.isEmpty) {
+                // If cache is empty, just use the new events but ensure no duplicates
+                final uniqueEvents = _removeDuplicateEvents(newEvents);
+                _eventsCache[filter] = List.from(uniqueEvents);
+                Logger.d('HomeScreen',
+                    'Cache was empty, added ${uniqueEvents.length} events for filter: $filter');
+              } else {
+                // Merge new events with existing ones, avoiding duplicates
+                final existingIds =
+                    _eventsCache[filter]!.map((e) => e.id).toSet();
+                final uniqueNewEvents = newEvents
+                    .where((e) => !existingIds.contains(e.id))
+                    .toList();
+
+                // Additional check to remove any potential duplicates
+                final deduplicatedEvents =
+                    _removeDuplicateEvents(uniqueNewEvents);
+
+                if (deduplicatedEvents.isNotEmpty) {
+                  _eventsCache[filter]!.addAll(deduplicatedEvents);
+                  // Sort the cache by creation date
+                  _eventsCache[filter]!
+                      .sort((a, b) => b.createdAt.compareTo(a.createdAt));
+                  Logger.d('HomeScreen',
+                      'Added ${deduplicatedEvents.length} new events to cache for filter: $filter');
+                }
+              }
+            } else if (_eventsCache[filter]!.isEmpty) {
+              // If we got no events and the cache is empty, there are no events to show
               _hasMoreEvents[filter] = false;
-              Logger.d('HomeScreen', 'No more events for filter: $filter');
-            } else {
-              _hasMoreEvents[filter] = true;
-              Logger.d('HomeScreen', 'More events available for filter: $filter');
+              Logger.d('HomeScreen', 'No events available for filter: $filter');
             }
-
-            // Update the cache with improved duplicate detection
-            if (_eventsCache[filter]!.isEmpty) {
-              // If cache is empty, just use the new events but ensure no duplicates
-              final uniqueEvents = _removeDuplicateEvents(newEvents);
-              _eventsCache[filter] = List.from(uniqueEvents);
-              Logger.d('HomeScreen', 'Cache was empty, added ${uniqueEvents.length} events for filter: $filter');
-            } else {
-              // Merge new events with existing ones, avoiding duplicates
-              final existingIds = _eventsCache[filter]!.map((e) => e.id).toSet();
-              final uniqueNewEvents = newEvents.where((e) => !existingIds.contains(e.id)).toList();
-
-              // Additional check to remove any potential duplicates
-              final deduplicatedEvents = _removeDuplicateEvents(uniqueNewEvents);
-
-              if (deduplicatedEvents.isNotEmpty) {
-                _eventsCache[filter]!.addAll(deduplicatedEvents);
-                // Sort the cache by creation date
-                _eventsCache[filter]!.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-                Logger.d('HomeScreen', 'Added ${deduplicatedEvents.length} new events to cache for filter: $filter');
-              }
-            }
-          } else if (_eventsCache[filter]!.isEmpty) {
-            // If we got no events and the cache is empty, there are no events to show
-            _hasMoreEvents[filter] = false;
-            Logger.d('HomeScreen', 'No events available for filter: $filter');
           }
-        }
 
-        // Get events from cache and ensure they're deduplicated
-        var events = _eventsCache[filter] ?? [];
+          // Get events from cache and ensure they're deduplicated
+          var events = _eventsCache[filter] ?? [];
 
-        // Special check for duplicate events on initial load
-        if (events.length > 1) {
-          final deduplicated = _removeDuplicateEvents(events);
-          if (deduplicated.length < events.length) {
-            Logger.d('HomeScreen', 'Found and removed ${events.length - deduplicated.length} duplicate events in UI layer for $filter');
-            events = deduplicated;
-            // Update the cache with deduplicated events
-            _eventsCache[filter] = deduplicated;
-          }
-        }
-
-        if (events.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.event_busy,
-                  size: 64,
-                  color: Theme.of(context).disabledColor,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'No events available',
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Theme.of(context).textTheme.bodyLarge?.color,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  filter == 'JOINED'
-                      ? 'You haven\'t joined or created any events yet'
-                      : 'Check back later or create a new event',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Theme.of(context).textTheme.bodyMedium?.color,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => _refreshEvents(filter, eventService),
-                  child: const Text('Refresh'),
-                ),
-              ],
-            ),
-          );
-        }
-
-        // Create a scroll controller for pagination
-        final scrollController = ScrollController();
-
-        // Add post-frame callback to ensure the controller is attached before adding listener
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          scrollController.addListener(() {
-            // Check if we've scrolled to the bottom
-            if (scrollController.hasClients &&
-                scrollController.position.pixels >= scrollController.position.maxScrollExtent * 0.8) {
-              // Load more events when reaching 80% of the list
-              if (_hasMoreEvents[filter] == true) {
-                _loadMoreEvents(filter, eventService);
-              }
+          // Special check for duplicate events on initial load
+          if (events.length > 1) {
+            final deduplicated = _removeDuplicateEvents(events);
+            if (deduplicated.length < events.length) {
+              Logger.d('HomeScreen',
+                  'Found and removed ${events.length - deduplicated.length} duplicate events in UI layer for $filter');
+              events = deduplicated;
+              // Update the cache with deduplicated events
+              _eventsCache[filter] = deduplicated;
             }
+          }
+
+          if (events.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.event_busy,
+                    size: 64,
+                    color: Theme.of(context).disabledColor,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No events available',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    filter == 'JOINED'
+                        ? 'You haven\'t joined or created any events yet'
+                        : 'Check back later or create a new event',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(context).textTheme.bodyMedium?.color,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => _refreshEvents(filter, eventService),
+                    child: const Text('Refresh'),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          // Create a scroll controller for pagination
+          final scrollController = ScrollController();
+
+          // Add post-frame callback to ensure the controller is attached before adding listener
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            scrollController.addListener(() {
+              // Check if we've scrolled to the bottom
+              if (scrollController.hasClients &&
+                  scrollController.position.pixels >=
+                      scrollController.position.maxScrollExtent * 0.8) {
+                // Load more events when reaching 80% of the list
+                if (_hasMoreEvents[filter] == true) {
+                  _loadMoreEvents(filter, eventService);
+                }
+              }
+            });
           });
-        });
 
-        return EventFeed(
-          events: events,
-          onJoin: _handleJoinEvent,
-          onIgnore: _handleIgnoreEvent,
-          scrollController: scrollController,
-          filterType: filter,
-          onRefresh: () async {
-            Logger.d('HomeScreen', 'Pull-to-refresh triggered from EventFeed');
-            await _refreshCurrentFilter();
-            return;
-          },
-        );
-      },
-    );
+          return EventFeed(
+            events: events,
+            onJoin: _handleJoinEvent,
+            onIgnore: _handleIgnoreEvent,
+            scrollController: scrollController,
+            filterType: filter,
+            onRefresh: () async {
+              Logger.d(
+                  'HomeScreen', 'Pull-to-refresh triggered from EventFeed');
+              await _refreshCurrentFilter();
+              return;
+            },
+          );
+        },
+      );
     } catch (e) {
       // If anything goes wrong, show a simple error message
-      Logger.e('HomeScreen', 'Error building filtered content for filter: $filter', e);
+      Logger.e('HomeScreen',
+          'Error building filtered content for filter: $filter', e);
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 48, color: Theme.of(context).colorScheme.error),
+            Icon(Icons.error_outline,
+                size: 48, color: Theme.of(context).colorScheme.error),
             const SizedBox(height: 16),
             Text(
               'Something went wrong',
@@ -932,7 +975,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: 8),
             Text(
               e.toString(),
-              style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color),
+              style: TextStyle(
+                  color: Theme.of(context).textTheme.bodyMedium?.color),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
@@ -967,7 +1011,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     // Check if user is authenticated
     if (!_isUserAuthenticated() && filter == 'JOINED') {
-      Logger.d('HomeScreen', 'Cannot load more events for JOINED filter when user is not authenticated');
+      Logger.d('HomeScreen',
+          'Cannot load more events for JOINED filter when user is not authenticated');
       return;
     }
 
@@ -978,7 +1023,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return;
     }
 
-    Logger.d('HomeScreen', 'Loading more events for filter: $filter, last ID: $lastEventId');
+    Logger.d('HomeScreen',
+        'Loading more events for filter: $filter, last ID: $lastEventId');
 
     // Prevent duplicate loading calls
     if (_isLoadingMore) {
@@ -993,7 +1039,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
       // Get the document snapshot for pagination
       final eventsCollection = FirebaseFirestore.instance.collection('events');
-      final docSnapshot = await eventsCollection.doc(lastEventId as String).get();
+      final docSnapshot =
+          await eventsCollection.doc(lastEventId as String).get();
 
       if (!docSnapshot.exists) {
         Logger.e('HomeScreen', 'Last event document not found: $lastEventId');
@@ -1003,15 +1050,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
 
       // Get more events
-      Logger.d('HomeScreen', 'Fetching more events after document: $lastEventId');
-      final moreEvents = await _getFilteredEventsStream(filter, eventService, startAfter: docSnapshot).first;
-      Logger.d('HomeScreen', 'Received ${moreEvents.length} more events for filter: $filter');
+      Logger.d(
+          'HomeScreen', 'Fetching more events after document: $lastEventId');
+      final moreEvents = await _getFilteredEventsStream(filter, eventService,
+              startAfter: docSnapshot)
+          .first;
+      Logger.d('HomeScreen',
+          'Received ${moreEvents.length} more events for filter: $filter');
 
       // Update the cache with the new events using improved duplicate detection
       if (moreEvents.isNotEmpty) {
         // Merge new events with existing ones, avoiding duplicates
         final existingIds = _eventsCache[filter]!.map((e) => e.id).toSet();
-        final uniqueNewEvents = moreEvents.where((e) => !existingIds.contains(e.id)).toList();
+        final uniqueNewEvents =
+            moreEvents.where((e) => !existingIds.contains(e.id)).toList();
 
         // Additional check to remove any potential duplicates
         final deduplicatedEvents = _removeDuplicateEvents(uniqueNewEvents);
@@ -1019,28 +1071,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         if (deduplicatedEvents.isNotEmpty) {
           _eventsCache[filter]!.addAll(deduplicatedEvents);
           // Sort the cache by creation date
-          _eventsCache[filter]!.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          Logger.d('HomeScreen', 'Added ${deduplicatedEvents.length} new events to cache for filter: $filter');
+          _eventsCache[filter]!
+              .sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          Logger.d('HomeScreen',
+              'Added ${deduplicatedEvents.length} new events to cache for filter: $filter');
 
           // Update the last document
           _updateLastDocument(filter, moreEvents.last.id);
-          Logger.d('HomeScreen', 'Updated last document to: ${moreEvents.last.id}');
+          Logger.d(
+              'HomeScreen', 'Updated last document to: ${moreEvents.last.id}');
 
           // Cache the events
           for (final event in deduplicatedEvents) {
             eventCacheService.updateEvent(event);
           }
         } else {
-          Logger.d('HomeScreen', 'No unique new events found for filter: $filter');
+          Logger.d(
+              'HomeScreen', 'No unique new events found for filter: $filter');
         }
 
         // If we got fewer events than requested, there are no more to load
         if (moreEvents.length < _eventsPerPage) {
           _hasMoreEvents[filter] = false;
-          Logger.d('HomeScreen', 'No more events available for filter: $filter');
+          Logger.d(
+              'HomeScreen', 'No more events available for filter: $filter');
         } else {
           _hasMoreEvents[filter] = true;
-          Logger.d('HomeScreen', 'More events may be available for filter: $filter');
+          Logger.d(
+              'HomeScreen', 'More events may be available for filter: $filter');
         }
 
         // Force a rebuild
@@ -1053,20 +1111,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         Logger.d('HomeScreen', 'No more events returned for filter: $filter');
       }
     } catch (e) {
-      Logger.e('HomeScreen', 'Error loading more events for filter: $filter', e);
+      Logger.e(
+          'HomeScreen', 'Error loading more events for filter: $filter', e);
       _hasMoreEvents[filter] = true; // Allow retry on error
     } finally {
       _isLoadingMore = false;
     }
   }
 
-  Stream<List<EventModel>> _getFilteredEventsStream(String filter, EventService eventService, {DocumentSnapshot? startAfter}) {
+  Stream<List<EventModel>> _getFilteredEventsStream(
+      String filter, EventService eventService,
+      {DocumentSnapshot? startAfter}) {
     try {
-      Logger.d('HomeScreen', 'Getting events for filter: $filter, pagination: ${startAfter != null}, timestamp: ${DateTime.now().toIso8601String()}');
+      Logger.d('HomeScreen',
+          'Getting events for filter: $filter, pagination: ${startAfter != null}, timestamp: ${DateTime.now().toIso8601String()}');
 
       // Ensure filter is valid
       if (filter.isEmpty || !_filters.contains(filter)) {
-        Logger.e('HomeScreen', 'Invalid filter in _getFilteredEventsStream: $filter, defaulting to NEW');
+        Logger.e('HomeScreen',
+            'Invalid filter in _getFilteredEventsStream: $filter, defaulting to NEW');
         filter = 'NEW';
       }
 
@@ -1075,30 +1138,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         case 'JOINED':
           // Get events that the current user has joined
           Logger.d('HomeScreen', 'Getting joined events for JOINED filter');
-          return eventService.getJoinedEvents(limit: _eventsPerPage, startAfter: startAfter)
-            .handleError((error) {
-              Logger.e('HomeScreen', 'Error getting JOINED events', error);
-              return <EventModel>[];
-            });
+          return eventService
+              .getJoinedEvents(limit: _eventsPerPage, startAfter: startAfter)
+              .handleError((error) {
+            Logger.e('HomeScreen', 'Error getting JOINED events', error);
+            return <EventModel>[];
+          });
 
         case 'NEW':
           // Get public events with pagination
           Logger.d('HomeScreen', 'Getting public events for NEW filter');
-          return eventService.getPublicEvents(limit: _eventsPerPage, startAfter: startAfter)
-            .handleError((error) {
-              Logger.e('HomeScreen', 'Error getting NEW events', error);
-              return <EventModel>[];
-            });
+          return eventService
+              .getPublicEvents(limit: _eventsPerPage, startAfter: startAfter)
+              .handleError((error) {
+            Logger.e('HomeScreen', 'Error getting NEW events', error);
+            return <EventModel>[];
+          });
 
         case 'SHOW ALL':
         default:
           // Get all events with pagination
           Logger.d('HomeScreen', 'Getting all events for SHOW ALL filter');
-          return eventService.getEvents(limit: _eventsPerPage, startAfter: startAfter)
-            .handleError((error) {
-              Logger.e('HomeScreen', 'Error getting SHOW ALL events', error);
-              return <EventModel>[];
-            });
+          return eventService
+              .getEvents(limit: _eventsPerPage, startAfter: startAfter)
+              .handleError((error) {
+            Logger.e('HomeScreen', 'Error getting SHOW ALL events', error);
+            return <EventModel>[];
+          });
       }
     } catch (e) {
       // If anything goes wrong, log the error and return an empty stream
@@ -1168,11 +1234,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // Helper method to check if user has a business account
   bool _isBusinessAccount(User? user, OnboardingData? onboardingData) {
-    if (user == null) return false;
+    if (user != null && onboardingData != null) {
+      try {
+        final dynamic data = onboardingData;
+        // Check if the 'accountType' property exists and is 'business'
+        if (data.accountType != null) {
+          return data.accountType == 'business';
+        }
+      } catch (e) {
+        Logger.d('HomeScreen',
+            'Could not access "accountType" property on onboardingData: $e');
+      }
+    }
+    return false;
+  }
 
-    // Use the UserCacheService to check if the user has a business account
-    final cacheService = ref.read(userCacheServiceProvider);
-    return cacheService.isBusinessAccount(user.uid, onboardingData);
+  bool _isBusinessVerified(User? user, OnboardingData? onboardingData) {
+    if (user != null && onboardingData != null) {
+      // This pattern is more robust if the provider doesn't return the specific subtype.
+      // It tries to access the 'verified' property dynamically.
+      try {
+        final dynamic data = onboardingData;
+        // Check if the 'verified' property exists and is true.
+        if (data.verified != null) {
+          return data.verified == true;
+        }
+      } catch (e) {
+        // This catch block will handle cases where 'onboardingData' doesn't have a 'verified' property.
+        Logger.d('HomeScreen',
+            'Could not access "verified" property on onboardingData: $e');
+      }
+    }
+    // If any of the conditions are not met, they are not a verified business.
+    return false;
   }
 
   // Helper method to get user profile image widget
@@ -1183,7 +1277,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     // Use the UserCacheService to get the profile image URL
     final cacheService = ref.read(userCacheServiceProvider);
-    final imageUrl = cacheService.getProfileImageUrl(user.uid, onboardingData, user);
+    final imageUrl =
+        cacheService.getProfileImageUrl(user.uid, onboardingData, user);
 
     if (imageUrl == null || imageUrl.isEmpty) {
       return const Icon(Icons.person, size: 40, color: Colors.white70);
@@ -1194,13 +1289,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final cacheKey = '${user.uid}_profile_image';
 
     // Add a timestamp to the URL as a query parameter to bypass cache
-    final timestampedUrl = '$imageUrl${imageUrl.contains('?') ? '&' : '?'}t=${DateTime.now().millisecondsSinceEpoch}';
+    final timestampedUrl =
+        '$imageUrl${imageUrl.contains('?') ? '&' : '?'}t=${DateTime.now().millisecondsSinceEpoch}';
 
-    Logger.d('HomeScreen', 'Loading profile image for user: ${user.uid}, URL: $timestampedUrl');
+    Logger.d('HomeScreen',
+        'Loading profile image for user: ${user.uid}, URL: $timestampedUrl');
 
     return ClipOval(
       // Use a unique key to force rebuild when user changes
-      key: ValueKey('profile_image_${user.uid}_${DateTime.now().millisecondsSinceEpoch}'),
+      key: ValueKey(
+          'profile_image_${user.uid}_${DateTime.now().millisecondsSinceEpoch}'),
       child: CachedNetworkImage(
         imageUrl: timestampedUrl,
         placeholder: (context, url) => const CircularProgressIndicator(),
@@ -1258,10 +1356,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
       // Check if user is authenticated for JOINED filter only
       if (!_isUserAuthenticated() && filter == 'JOINED') {
-        Logger.d('HomeScreen', 'Cannot refresh JOINED filter when user is not authenticated');
+        Logger.d('HomeScreen',
+            'Cannot refresh JOINED filter when user is not authenticated');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please sign in to view joined events')),
+            const SnackBar(
+                content: Text('Please sign in to view joined events')),
           );
         }
         return;
@@ -1276,7 +1376,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         if (mounted) {
           final scaffoldMessenger = ScaffoldMessenger.of(context);
           scaffoldMessenger.showSnackBar(
-            const SnackBar(content: Text('Failed to refresh events. Please try again.')),
+            const SnackBar(
+                content: Text('Failed to refresh events. Please try again.')),
           );
         }
         return;
@@ -1293,33 +1394,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
       // Get fresh events with a small delay to ensure Firestore has updated
       Logger.d('HomeScreen', 'Fetching fresh events for filter: $filter');
-      await Future.delayed(const Duration(milliseconds: 500)); // Longer delay to ensure Firestore has updated
+      await Future.delayed(const Duration(
+          milliseconds: 500)); // Longer delay to ensure Firestore has updated
 
       // Create a new stream each time to ensure we get fresh data
-      final freshEvents = await _getFilteredEventsStream(filter, eventService).first;
-      Logger.d('HomeScreen', 'Received ${freshEvents.length} fresh events for filter: $filter');
+      final freshEvents =
+          await _getFilteredEventsStream(filter, eventService).first;
+      Logger.d('HomeScreen',
+          'Received ${freshEvents.length} fresh events for filter: $filter');
 
       // Update the cache with a new list (not the same reference), ensuring no duplicates
       final deduplicatedEvents = _removeDuplicateEvents(freshEvents);
       _eventsCache[filter] = List.from(deduplicatedEvents);
-      Logger.d('HomeScreen', 'Updated cache with ${deduplicatedEvents.length} deduplicated events for filter: $filter');
+      Logger.d('HomeScreen',
+          'Updated cache with ${deduplicatedEvents.length} deduplicated events for filter: $filter');
 
       // Check if we got any events
       if (freshEvents.isEmpty) {
         Logger.d('HomeScreen', 'No more events available for filter: $filter');
         _hasMoreEvents[filter] = false;
       } else {
-        Logger.d('HomeScreen', 'Got ${freshEvents.length} events for filter: $filter');
+        Logger.d('HomeScreen',
+            'Got ${freshEvents.length} events for filter: $filter');
         _hasMoreEvents[filter] = true;
 
         // Update the last document if we got any events
         _updateLastDocument(filter, freshEvents.last.id);
-        Logger.d('HomeScreen', 'Updated last document to: ${freshEvents.last.id}');
+        Logger.d(
+            'HomeScreen', 'Updated last document to: ${freshEvents.last.id}');
 
         // If we got fewer events than requested, there are no more to load
         if (freshEvents.length < _eventsPerPage) {
           _hasMoreEvents[filter] = false;
-          Logger.d('HomeScreen', 'No more events available for filter: $filter');
+          Logger.d(
+              'HomeScreen', 'No more events available for filter: $filter');
         }
       }
 
@@ -1330,7 +1438,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         });
       }
 
-      Logger.d('HomeScreen', 'Refresh completed for filter: $filter, got ${freshEvents.length} events');
+      Logger.d('HomeScreen',
+          'Refresh completed for filter: $filter, got ${freshEvents.length} events');
     } catch (e) {
       Logger.e('HomeScreen', 'Error refreshing events', e);
       if (mounted) {
@@ -1348,7 +1457,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true, // Makes the bottom sheet expandable
-      backgroundColor: Colors.transparent, // Transparent background to use the sheet's own decoration
+      backgroundColor: Colors
+          .transparent, // Transparent background to use the sheet's own decoration
       builder: (context) => const CreateEventSheet(),
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height,
@@ -1356,6 +1466,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
     );
   }
+
   // Subscribe to real-time updates for events
   void _subscribeToEventUpdates() {
     Logger.d('HomeScreen', 'Setting up real-time event subscriptions');
@@ -1371,7 +1482,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .collection('events')
         .snapshots()
         .listen((snapshot) {
-      Logger.d('HomeScreen', 'Received real-time update from events collection');
+      Logger.d(
+          'HomeScreen', 'Received real-time update from events collection');
 
       // Check for added, modified, or removed events
       bool hasChanges = false;
@@ -1406,20 +1518,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 if (!events.any((e) => e == event)) {
                   events.add(event);
                   hasChanges = true;
-                  Logger.d('HomeScreen', 'Added new event to filter $filter: ${event.id} with content key: ${event.contentKey}');
+                  Logger.d('HomeScreen',
+                      'Added new event to filter $filter: ${event.id} with content key: ${event.contentKey}');
 
                   // After adding, deduplicate the entire list to be safe
                   final deduplicated = _removeDuplicateEvents(events);
                   if (deduplicated.length < events.length) {
                     events.clear();
                     events.addAll(deduplicated);
-                    Logger.d('HomeScreen', 'Removed duplicates after adding event, new count: ${events.length}');
+                    Logger.d('HomeScreen',
+                        'Removed duplicates after adding event, new count: ${events.length}');
                   }
 
                   // Sort the events based on filter
                   _sortEventsByFilter(events, filter);
                 } else {
-                  Logger.d('HomeScreen', 'Prevented duplicate event from being added to filter $filter: ${event.id} with content key: ${event.contentKey}');
+                  Logger.d('HomeScreen',
+                      'Prevented duplicate event from being added to filter $filter: ${event.id} with content key: ${event.contentKey}');
                 }
               }
             }
@@ -1459,7 +1574,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           .where('inviteeId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
           .snapshots()
           .listen((snapshot) {
-        Logger.d('HomeScreen', 'Received real-time update from RSVPs collection');
+        Logger.d(
+            'HomeScreen', 'Received real-time update from RSVPs collection');
 
         // If there are changes to RSVPs, update the UI but don't trigger a full refresh
         if (snapshot.docChanges.isNotEmpty) {
@@ -1489,17 +1605,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       case 'JOINED':
         // Show events created by the user or joined by the user
         return currentUserId != null &&
-               (event.userId == currentUserId ||
+            (event.userId == currentUserId ||
                 event.joinedBy.contains(currentUserId));
 
       case 'NEW':
         // Show public events, events created by the user, and private events the user is invited to or has joined
         return !event.isPrivate ||
-               (currentUserId != null && (
-                 event.userId == currentUserId ||
-                 event.joinedBy.contains(currentUserId) ||
-                 event.isInvited
-               ));
+            (currentUserId != null &&
+                (event.userId == currentUserId ||
+                    event.joinedBy.contains(currentUserId) ||
+                    event.isInvited));
 
       case 'SHOW ALL':
       default:
@@ -1508,8 +1623,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         if (currentUserId == null) return false;
 
         return event.userId == currentUserId ||
-               event.joinedBy.contains(currentUserId) ||
-               event.isInvited;
+            event.joinedBy.contains(currentUserId) ||
+            event.isInvited;
     }
   }
 
@@ -1590,7 +1705,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
           // Skip events with empty content keys
           if (contentKey.isEmpty) {
-            Logger.e('HomeScreen', 'Skipping event with empty content key: ${event.id}');
+            Logger.e('HomeScreen',
+                'Skipping event with empty content key: ${event.id}');
             continue;
           }
 
@@ -1607,7 +1723,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // If the existing event has an empty ID but the new one doesn't, replace it
             if (existingEvent.id.isEmpty && event.id.isNotEmpty) {
               uniqueEvents[contentKey] = event;
-              Logger.d('HomeScreen', 'Replaced event with empty ID with event with ID: ${event.id}');
+              Logger.d('HomeScreen',
+                  'Replaced event with empty ID with event with ID: ${event.id}');
             }
           } else {
             // This is a new unique event
@@ -1615,14 +1732,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           }
         } catch (e) {
           // If there's an error processing this event, log it and skip
-          Logger.e('HomeScreen', 'Error processing event during deduplication: ${event.id}', e);
+          Logger.e('HomeScreen',
+              'Error processing event during deduplication: ${event.id}', e);
           continue;
         }
       }
 
       // Log if we found any duplicates
       if (uniqueEvents.length < events.length) {
-        Logger.d('HomeScreen', 'Removed ${events.length - uniqueEvents.length} duplicate events based on content');
+        Logger.d('HomeScreen',
+            'Removed ${events.length - uniqueEvents.length} duplicate events based on content');
       }
 
       // Return the values from the map as a list
@@ -1637,21 +1756,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // Helper method to clean up duplicate events in all filters
   void _cleanupDuplicateEvents() {
     try {
-      Logger.d('HomeScreen', '🧹 STARTING DUPLICATE EVENT CLEANUP ON APP STARTUP');
+      Logger.d(
+          'HomeScreen', '🧹 STARTING DUPLICATE EVENT CLEANUP ON APP STARTUP');
 
       // Initialize cache for each filter if not already done
       for (final filter in _filters) {
         if (!_eventsCache.containsKey(filter)) {
           _eventsCache[filter] = [];
           _hasMoreEvents[filter] = true;
-          Logger.d('HomeScreen', 'Initialized cache for filter: $filter during cleanup');
+          Logger.d('HomeScreen',
+              'Initialized cache for filter: $filter during cleanup');
         }
       }
 
       // Process each filter
       for (final filter in _filters) {
         try {
-          if (_eventsCache.containsKey(filter) && _eventsCache[filter]!.isNotEmpty) {
+          if (_eventsCache.containsKey(filter) &&
+              _eventsCache[filter]!.isNotEmpty) {
             // Get the current events for this filter
             final events = _eventsCache[filter]!;
 
@@ -1667,22 +1789,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // Log the results
             final countAfter = deduplicatedEvents.length;
             if (countBefore != countAfter) {
-              Logger.d('HomeScreen', 'Removed ${countBefore - countAfter} duplicate events from $filter filter');
+              Logger.d('HomeScreen',
+                  'Removed ${countBefore - countAfter} duplicate events from $filter filter');
 
               // Log details about the events for debugging
               Logger.d('HomeScreen', 'Events in $filter after deduplication:');
               for (final event in deduplicatedEvents) {
-                Logger.d('HomeScreen', '  Event ID: ${event.id}, Content Key: ${event.contentKey}, Inquiry: ${event.inquiry}');
+                Logger.d('HomeScreen',
+                    '  Event ID: ${event.id}, Content Key: ${event.contentKey}, Inquiry: ${event.inquiry}');
               }
             } else {
-              Logger.d('HomeScreen', 'No duplicate events found in $filter filter');
+              Logger.d(
+                  'HomeScreen', 'No duplicate events found in $filter filter');
             }
           } else {
             Logger.d('HomeScreen', 'No events to clean up for filter: $filter');
           }
         } catch (e) {
           // If there's an error processing a specific filter, log it and continue with the next one
-          Logger.e('HomeScreen', 'Error cleaning up events for filter: $filter', e);
+          Logger.e(
+              'HomeScreen', 'Error cleaning up events for filter: $filter', e);
           // Ensure the filter has a valid cache entry
           _eventsCache[filter] = [];
         }
@@ -1708,7 +1834,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // Force a rebuild with empty caches
       if (mounted) {
         setState(() {
-          Logger.d('HomeScreen', 'Forcing UI update after error in deduplication');
+          Logger.d(
+              'HomeScreen', 'Forcing UI update after error in deduplication');
         });
       }
     }

@@ -1,28 +1,28 @@
 import 'dart:async';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:yetuga/providers/firebase_provider.dart';
-import 'package:chapasdk/chapasdk.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 import '../../models/event_model.dart';
 import '../../models/onboarding_data.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/onboarding_provider.dart';
 import '../../providers/service_providers.dart';
+import '../../providers/firebase_provider.dart';
 import '../../providers/user_cache_provider.dart';
-import '../../services/follow_service.dart';
 import '../../utils/logger.dart';
 import '../../utils/confirmation_dialog.dart';
 import '../../widgets/event_feed_card.dart';
 import '../../widgets/profile_image_picker_dialog.dart';
+import '../../widgets/payment_webview.dart';
+import '../../services/follow_service.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
-  final String?
-      userId; // Optional userId parameter, if null shows current user's profile
+  final String? userId;
 
   const ProfileScreen({super.key, this.userId});
 
@@ -31,12 +31,10 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  User? _profileUser;
   Map<String, dynamic>? _userData;
   bool _isLoading = true;
   String? _error;
 
-  // Follow-related state
   bool _isFollowing = false;
   bool _isFollowLoading = false;
   int _followersCount = 0;
@@ -49,113 +47,85 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _loadUserData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
     try {
-      // Set the profile user (current user or null if viewing someone else's profile)
-      _profileUser =
-          widget.userId == null ? ref.read(currentUserProvider) : null;
-
-      // If userId is provided, load that user's data from Firestore
-      if (widget.userId != null) {
-        final firebaseService = ref.read(firebaseServiceProvider);
-        _userData = await firebaseService.getUserProfileById(widget.userId!);
-        Logger.d(
-            'ProfileScreen', 'Loaded profile data for user: ${widget.userId}');
-
-        // Load follow data only when viewing another user's profile
-        await _loadFollowData();
-      } else {
-        // Load follow counts for current user
-        final currentUser = ref.read(currentUserProvider);
-        if (currentUser != null) {
-          await _loadFollowCounts(currentUser.uid);
-        }
+      final profileId = widget.userId ?? ref.read(currentUserProvider)?.uid;
+      if (profileId == null) {
+        throw Exception("User not found");
       }
 
-      setState(() {
-        _isLoading = false;
-      });
+      final firebaseService = ref.read(firebaseServiceProvider);
+      _userData = await firebaseService.getUserProfileById(profileId);
+      Logger.d('ProfileScreen', 'Loaded profile data for user: $profileId');
+
+      if (widget.userId != null && widget.userId != ref.read(currentUserProvider)?.uid) {
+        await _loadFollowData();
+      } else {
+        await _loadFollowCounts(profileId);
+      }
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       Logger.e('ProfileScreen', 'Error loading user data', e);
-      setState(() {
-        _isLoading = false;
-        _error = 'Failed to load profile: $e';
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Failed to load profile: $e';
+        });
+      }
     }
   }
 
-  // Load follow data (follow status and counts)
   Future<void> _loadFollowData() async {
     if (widget.userId == null) return;
-
     try {
       final followService = ref.read(followServiceProvider);
-
-      // Check if current user is following this profile
       final isFollowing = await followService.isFollowing(widget.userId!);
+      await _loadFollowCounts(widget.userId!);
 
-      // Get follower and following counts
-      final followersCount =
-          await followService.getFollowersCount(widget.userId!);
-      final followingCount =
-          await followService.getFollowingCount(widget.userId!);
-
-      setState(() {
-        _isFollowing = isFollowing;
-        _followersCount = followersCount;
-        _followingCount = followingCount;
-      });
-
-      Logger.d('ProfileScreen',
-          'Loaded follow data: isFollowing=$isFollowing, followers=$followersCount, following=$followingCount');
+      if (mounted) {
+        setState(() {
+          _isFollowing = isFollowing;
+        });
+      }
     } catch (e) {
       Logger.e('ProfileScreen', 'Error loading follow data', e);
-      // Don't set error state, as this is not critical
     }
   }
 
-  // Load follow counts for a user
   Future<void> _loadFollowCounts(String userId) async {
     try {
       final followService = ref.read(followServiceProvider);
-
-      // Get follower and following counts
       final followersCount = await followService.getFollowersCount(userId);
       final followingCount = await followService.getFollowingCount(userId);
-
-      setState(() {
-        _followersCount = followersCount;
-        _followingCount = followingCount;
-      });
-
-      Logger.d('ProfileScreen',
-          'Loaded follow counts: followers=$followersCount, following=$followingCount');
+      if (mounted) {
+        setState(() {
+          _followersCount = followersCount;
+          _followingCount = followingCount;
+        });
+      }
     } catch (e) {
       Logger.e('ProfileScreen', 'Error loading follow counts', e);
-      // Don't set error state, as this is not critical
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Only use these providers for the current user
     final theme = Theme.of(context);
-    final user =
-        widget.userId == null ? ref.watch(currentUserProvider) : _profileUser;
-    final onboardingDataAsync =
-        widget.userId == null ? ref.watch(onboardingProvider) : null;
+    final currentUser = ref.watch(currentUserProvider);
 
-    // Get onboarding data for current user
-    OnboardingData? onboardingData;
-    if (onboardingDataAsync != null) {
-      onboardingDataAsync.whenData((data) {
-        onboardingData = data;
-      });
-    }
+    final isCurrentUserProfile = widget.userId == null || widget.userId == currentUser?.uid;
+    final isBusiness = _userData?['accountType'] == 'business';
+    final isVerified = _userData?['verified'] == true;
 
     return Scaffold(
       appBar: AppBar(
@@ -166,364 +136,163 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text(_error!))
-              : (user == null && widget.userId == null)
-                  ? const Center(
-                      child: Text('Please sign in to view your profile'))
-                  : (widget.userId != null && _userData == null)
-                      ? const Center(child: Text('User profile not found'))
-                      : SingleChildScrollView(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              // Profile header with improved design
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 24.0, horizontal: 16.0),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      _isBusinessAccount(
-                                              user, onboardingData, ref)
-                                          ? const Color(0xFFFFD700).withAlpha(
-                                              50) // Gold tint for business accounts
-                                          : Theme.of(context)
-                                              .colorScheme
-                                              .primary
-                                              .withAlpha(30),
-                                      Theme.of(context).scaffoldBackgroundColor,
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Column(
-                                  children: [
-                                    // Profile image with edit button for current user
-                                    Center(
-                                      child: GestureDetector(
-                                        onTap: widget.userId == null &&
-                                                user != null
-                                            ? () =>
-                                                _showProfileImagePickerDialog(
-                                                    context,
-                                                    user,
-                                                    onboardingData)
-                                            : null,
-                                        child: Stack(
-                                          children: [
-                                            Container(
-                                              decoration: BoxDecoration(
-                                                shape: BoxShape.circle,
-                                                border: Border.all(
-                                                  color: _isBusinessAccount(
-                                                          user,
-                                                          onboardingData,
-                                                          ref)
-                                                      ? const Color(
-                                                          0xFFFFD700) // Gold color for business
-                                                      : Theme.of(context)
-                                                          .colorScheme
-                                                          .secondary,
-                                                  width: 3,
-                                                ),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black
-                                                        .withAlpha(40),
-                                                    blurRadius: 8,
-                                                    offset: const Offset(0, 3),
-                                                  ),
-                                                ],
-                                              ),
-                                              child: CircleAvatar(
-                                                radius:
-                                                    60, // Larger for profile page
-                                                backgroundColor:
-                                                    Colors.grey[300],
-                                                child: _getUserProfileImage(
-                                                    user, onboardingData, ref),
-                                              ),
-                                            ),
-                                            // Edit button overlay (only for current user's profile)
-                                            if (widget.userId == null &&
-                                                user != null)
-                                              Positioned(
-                                                right: 0,
-                                                bottom: 0,
-                                                child: Container(
-                                                  padding:
-                                                      const EdgeInsets.all(8),
-                                                  decoration: BoxDecoration(
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .primary,
-                                                    shape: BoxShape.circle,
-                                                    boxShadow: [
-                                                      BoxShadow(
-                                                        color: Colors.black
-                                                            .withAlpha(40),
-                                                        blurRadius: 4,
-                                                        offset:
-                                                            const Offset(0, 2),
-                                                      ),
-                                                    ],
-                                                    border: Border.all(
-                                                      color: Theme.of(context)
-                                                          .scaffoldBackgroundColor,
-                                                      width: 2,
-                                                    ),
-                                                  ),
-                                                  child: Icon(
-                                                    Icons.edit,
-                                                    size: 20,
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .onPrimary,
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-
-                                    // Display name
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          _getUserDisplayName(
-                                              user, onboardingData, ref),
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .headlineMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                        if (_isBusinessAccount(
-                                                user, onboardingData, ref) &&
-                                            _isBusinessVerified(
-                                                user, onboardingData, ref))
-                                          const Padding(
-                                            padding: EdgeInsets.only(left: 8.0),
-                                            child: Icon(Icons.verified,
-                                                color: Colors.blue, size: 28),
-                                          ),
-                                      ],
-                                    ),
-
-                                    // Username
-                                    Text(
-                                      '@${_getUserUsername(user, onboardingData, ref)}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium
-                                          ?.copyWith(
-                                            color: Theme.of(context)
-                                                .textTheme
-                                                .bodySmall
-                                                ?.color,
-                                          ),
-                                      textAlign: TextAlign.center,
-                                    ),
-
-                                    // Account type badge
-                                    if (_isBusinessAccount(
-                                        user, onboardingData, ref))
-                                      Container(
-                                        margin: const EdgeInsets.only(top: 8),
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 12, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFFFD700)
-                                              .withAlpha(50),
-                                          borderRadius:
-                                              BorderRadius.circular(16),
-                                          border: Border.all(
-                                            color: const Color(0xFFFFD700),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'Business Account',
-                                          style: TextStyle(
-                                            color: Color(0xFFFFD700),
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-
-                              // Follow/Unfollow button (only show when viewing other profiles)
-                              if (widget.userId != null &&
-                                  ref.read(currentUserProvider) != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 16.0),
-                                  child: _buildFollowButton(),
-                                ),
-
-                              // Followers and following counts
-                              Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 16.0),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    _buildCountItem(
-                                        'Followers', _followersCount),
-                                    const SizedBox(width: 32),
-                                    _buildCountItem(
-                                        'Following', _followingCount),
-                                  ],
-                                ),
-                              ),
-
-                              // Business verify banner (only for unverified business accounts)
-                              if (_isBusinessAccount(
-                                      user, onboardingData, ref) &&
-                                  !_isBusinessVerified(
-                                      user, onboardingData, ref))
-                                BusinessVerifyBanner(
-                                    onVerify: _handleVerifyBusiness),
-
-                              // Joined Events Section (without divider)
-                              _buildJoinedEventsSection(),
-                            ],
+              : _userData == null
+                  ? const Center(child: Text('User profile not found'))
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          _buildProfileHeader(isCurrentUserProfile, isBusiness, isVerified),
+                          const SizedBox(height: 16),
+                          if (!isCurrentUserProfile)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 16.0),
+                              child: _buildFollowButton(),
+                            ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _buildCountItem('Followers', _followersCount),
+                                const SizedBox(width: 32),
+                                _buildCountItem('Following', _followingCount),
+                              ],
+                            ),
                           ),
-                        ),
+                          if (isCurrentUserProfile && isBusiness && !isVerified)
+                            BusinessVerifyBanner(onVerify: _handleVerifyBusiness),
+                          _buildJoinedEventsSection(),
+                        ],
+                      ),
+                    ),
     );
   }
 
-  // Helper method to check if user has a business account
-  bool _isBusinessAccount(
-      User? user, OnboardingData? onboardingData, WidgetRef ref) {
-    if (widget.userId != null) {
-      // For other user's profile, check account type from Firestore data
-      if (_userData != null && _userData!.containsKey('accountType')) {
-        final accountType = _userData!['accountType'] as String?;
-        return accountType == 'business';
-      }
-      return false;
-    } else if (user != null) {
-      // For current user's profile, use the cache service
-      final cacheService = ref.read(userCacheServiceProvider);
-      return cacheService.isBusinessAccount(user.uid, onboardingData);
-    }
+  Widget _buildProfileHeader(bool isCurrentUserProfile, bool isBusiness, bool isVerified) {
+    final userDisplayName = _userData?['displayName'] ?? 'User';
+    final userUsername = _userData?['username'] ?? 'username';
+    final profileImageUrl = _userData?['profileImageUrl'];
 
-    return false;
-  }
-
-  // Helper method to get user profile image widget
-  Widget _getUserProfileImage(
-      User? user, OnboardingData? onboardingData, WidgetRef ref) {
-    String? imageUrl;
-    String? userId;
-
-    if (widget.userId != null) {
-      // For other user's profile, get image URL from Firestore data
-      userId = widget.userId;
-      if (_userData != null && _userData!.containsKey('profileImageUrl')) {
-        imageUrl = _userData!['profileImageUrl'] as String?;
-      }
-    } else if (user != null) {
-      // For current user's profile, use the cache service
-      userId = user.uid;
-      final cacheService = ref.read(userCacheServiceProvider);
-      imageUrl =
-          cacheService.getProfileImageUrl(user.uid, onboardingData, user);
-    }
-
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return const Icon(Icons.person, size: 60, color: Colors.white70);
-    }
-
-    // Generate a unique key that includes both the user ID and a timestamp
-    // This forces the widget to rebuild when the user changes
-    final cacheKey = '${userId ?? "unknown"}_profile_image';
-
-    // Add a timestamp to the URL as a query parameter to bypass cache
-    final timestampedUrl =
-        '$imageUrl${imageUrl.contains('?') ? '&' : '?'}t=${DateTime.now().millisecondsSinceEpoch}';
-
-    Logger.d('ProfileScreen',
-        'Loading profile image for user: $userId, URL: $timestampedUrl');
-
-    return ClipOval(
-      // Use a unique key to force rebuild when user changes
-      key: ValueKey(
-          'profile_image_${userId ?? "unknown"}_${DateTime.now().millisecondsSinceEpoch}'),
-      child: CachedNetworkImage(
-        imageUrl: timestampedUrl,
-        placeholder: (context, url) => const CircularProgressIndicator(),
-        errorWidget: (context, url, error) {
-          Logger.e('ProfileScreen', 'Error loading profile image: $error');
-          return const Icon(Icons.error);
-        },
-        fit: BoxFit.cover,
-        width: 120,
-        height: 120,
-        cacheKey: cacheKey,
-        // Disable caching in memory to ensure fresh image is loaded
-        memCacheWidth: null,
-        memCacheHeight: null,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 24.0, horizontal: 16.0),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            isBusiness
+                ? const Color(0xFFFFD700).withAlpha(50)
+                : Theme.of(context).colorScheme.primary.withAlpha(30),
+            Theme.of(context).scaffoldBackgroundColor,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          GestureDetector(
+            onTap: isCurrentUserProfile
+                ? () => _showProfileImagePickerDialog(context, ref.read(currentUserProvider)!)
+                : null,
+            child: Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isBusiness
+                          ? const Color(0xFFFFD700)
+                          : Theme.of(context).colorScheme.secondary,
+                      width: 3,
+                    ),
+                  ),
+                  child: CircleAvatar(
+                    radius: 60,
+                    backgroundColor: Colors.grey[300],
+                    child: (profileImageUrl != null && profileImageUrl.isNotEmpty)
+                        ? ClipOval(
+                            child: CachedNetworkImage(
+                              imageUrl: profileImageUrl,
+                              placeholder: (context, url) => const CircularProgressIndicator(),
+                              errorWidget: (context, url, error) => const Icon(Icons.error),
+                              fit: BoxFit.cover,
+                              width: 120,
+                              height: 120,
+                            ),
+                          )
+                        : const Icon(Icons.person, size: 60, color: Colors.white70),
+                  ),
+                ),
+                if (isCurrentUserProfile)
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.edit,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.onPrimary,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                userDisplayName,
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              if (isBusiness && isVerified)
+                const Padding(
+                  padding: EdgeInsets.only(left: 8.0),
+                  child: Icon(Icons.verified, color: Colors.blue, size: 20),
+                ),
+            ],
+          ),
+          Text(
+            '@$userUsername',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Theme.of(context).textTheme.bodySmall?.color,
+                ),
+          ),
+          if (isBusiness)
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFD700).withAlpha(50),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFFFD700), width: 1),
+              ),
+              child: const Text(
+                'Business Account',
+                style: TextStyle(
+                  color: Color(0xFFFFD700),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  // Helper method to get display name
-  String _getUserDisplayName(
-      User? user, OnboardingData? onboardingData, WidgetRef ref) {
-    if (widget.userId != null) {
-      // For other user's profile, get display name from Firestore data
-      if (_userData != null && _userData!.containsKey('displayName')) {
-        final displayName = _userData!['displayName'] as String?;
-        if (displayName != null && displayName.isNotEmpty) {
-          return displayName;
-        }
-      }
-      return 'User';
-    } else if (user != null) {
-      // For current user's profile, use the cache service
-      final cacheService = ref.read(userCacheServiceProvider);
-      return cacheService.getDisplayName(user.uid, onboardingData, user);
-    }
-
-    return 'User';
-  }
-
-  // Helper method to get username
-  String _getUserUsername(
-      User? user, OnboardingData? onboardingData, WidgetRef ref) {
-    if (widget.userId != null) {
-      // For other user's profile, get username from Firestore data
-      if (_userData != null && _userData!.containsKey('username')) {
-        final username = _userData!['username'] as String?;
-        if (username != null && username.isNotEmpty) {
-          return username;
-        }
-      }
-      return 'username';
-    } else if (user != null) {
-      // For current user's profile, use the cache service
-      final cacheService = ref.read(userCacheServiceProvider);
-      return cacheService.getUsername(user.uid, onboardingData, user);
-    }
-
-    return 'username';
-  }
-
-  // Build follow/unfollow button
   Widget _buildFollowButton() {
     return _isFollowLoading
         ? const CircularProgressIndicator()
@@ -545,7 +314,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           );
   }
 
-  // Build count item (followers/following)
   Widget _buildCountItem(String label, int count) {
     return Column(
       children: [
@@ -559,14 +327,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  // Show profile image picker bottom sheet
-  Future<void> _showProfileImagePickerDialog(
-      BuildContext context, User user, OnboardingData? onboardingData) async {
+  Future<void> _showProfileImagePickerDialog(BuildContext context, User user) async {
     // Get current profile image URL
     String? currentImageUrl;
-    if (onboardingData != null && onboardingData.profileImageUrl != null) {
-      currentImageUrl = onboardingData.profileImageUrl;
-    } else if (user.photoURL != null) {
+    if (user.photoURL != null) {
       currentImageUrl = user.photoURL;
     }
 
@@ -609,7 +373,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
-  // Build the joined events section
   Widget _buildJoinedEventsSection() {
     // Get the user ID (current user or profile user)
     final userId = widget.userId ?? ref.read(currentUserProvider)?.uid;
@@ -682,7 +445,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  // Handle follow/unfollow button press
   Future<void> _handleFollowButtonPressed() async {
     if (widget.userId == null) return;
 
@@ -699,7 +461,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           context: context,
           title: 'Unfollow User',
           message:
-              'Are you sure you want to unfollow ${_getUserDisplayName(null, null, ref)}?',
+              'Are you sure you want to unfollow ${_userData?['displayName']}?',
           confirmText: 'Unfollow',
           isDestructive: true,
         );
@@ -721,7 +483,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           final scaffoldMessenger = ScaffoldMessenger.of(context);
           scaffoldMessenger.showSnackBar(SnackBar(
               content:
-                  Text('Unfollowed ${_getUserDisplayName(null, null, ref)}')));
+                  Text('Unfollowed ${_userData?['displayName']}')));
         }
       } else {
         // Follow user
@@ -734,7 +496,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           final scaffoldMessenger = ScaffoldMessenger.of(context);
           scaffoldMessenger.showSnackBar(SnackBar(
               content:
-                  Text('Following ${_getUserDisplayName(null, null, ref)}')));
+                  Text('Following ${_userData?['displayName']}')));
         }
       }
     } catch (e) {
@@ -750,29 +512,72 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
-  // Helper to check if business account is verified
-  bool _isBusinessVerified(
-      User? user, OnboardingData? onboardingData, WidgetRef ref) {
-    if (widget.userId != null) {
-      // For other user's profile, check Firestore data
-      if (_userData != null && _userData!.containsKey('verified')) {
-        return _userData!['verified'] == true;
-      }
-      return false;
-    } else if (user != null && onboardingData != null) {
-      // For current user, check onboardingData
-      try {
-        // BusinessOnboardingData has 'verified' field
-        final dynamic data = onboardingData;
-        if (data.verified != null) {
-          return data.verified == true;
-        }
-      } catch (_) {}
-    }
-    return false;
+  Future<Map<String, String>?> _showNameInputDialog() async {
+    final formKey = GlobalKey<FormState>();
+    final firstNameController = TextEditingController();
+    final lastNameController = TextEditingController();
+
+    return showDialog<Map<String, String>>(
+      context: context,
+      barrierDismissible: false, // User must enter names or cancel
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Enter Your Full Name'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: firstNameController,
+                  decoration: const InputDecoration(labelText: 'First Name'),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter your first name';
+                    }
+                    return null;
+                  },
+                  textCapitalization: TextCapitalization.words,
+                ),
+                const SizedBox(
+                  height: 30,
+                ),
+                TextFormField(
+                  controller: lastNameController,
+                  decoration: const InputDecoration(labelText: 'Last Name'),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter your last name';
+                    }
+                    return null;
+                  },
+                  textCapitalization: TextCapitalization.words,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(null), // Cancel
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.of(context).pop({
+                    'firstName': firstNameController.text.trim(),
+                    'lastName': lastNameController.text.trim(),
+                  });
+                }
+              },
+              child: const Text('Submit'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
-  // Handler for verify button
   void _handleVerifyBusiness() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -792,53 +597,118 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ],
       ),
     );
-    if (confirmed == true) {
-      final user = FirebaseAuth.instance.currentUser;
-      final email = user?.email ?? '';
-      final txRef = 'yetugaBizVerify${DateTime.now().millisecondsSinceEpoch}';
-      final phone = user?.phoneNumber ?? '';
 
-      await Chapa.paymentParameters(
-        context: context,
-        publicKey: 'CHAPUBK_TEST-yFONBeuASocIdJKMkhGvXa4912Q5lBRx',
-        amount: '500',
-        currency: 'ETB',
-        email: email,
-        txRef: txRef,
-        firstName: '', // Optional
-        lastName: '', // Optional
-        phone: phone,
-        namedRouteFallBack: '',
-        nativeCheckout: true,
-        title: 'Verification',
-        desc: '500 ETB to verify your account on Yetuga.',
-        availablePaymentMethods: ['mpesa', 'cbebirr', 'telebirr', 'BoA'],
+    if (confirmed != true) return;
 
-        onPaymentFinished: (message, transactionReference, response) async {
-          // Payment successful, update Firestore
-          if (message == 'paymentSuccessful' && user != null) {
-            await FirebaseFirestore.instance
-                .collection('users')
-                .doc(user.uid)
-                .update({'verified': true});
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('Business verified successfully!')),
-              );
-              await _loadUserData();
-              Navigator.of(context).pop();
-            }
-          } else if (context.mounted) {
+    // Prompt for user's name after confirmation
+    final names = await _showNameInputDialog();
+    if (names == null) return; // User cancelled the name input dialog
+
+    final user = ref.read(currentUserProvider);
+    final email = user?.email ?? '';
+    final phone = user?.phoneNumber ?? '';
+    final userId = user?.uid;
+
+    final firstName = names['firstName']!;
+    final lastName = names['lastName']!;
+
+    if (userId == null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error: User details are missing.')),
+        );
+      }
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final response = await http.post(
+        Uri.parse(
+            'https://us-central1-yetuga-1d0d9.cloudfunctions.net/createPaymentSession/create-payment-session'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'userId': userId,
+          'email': email,
+          'amount': '500',
+          'currency': 'ETB',
+          'firstName': firstName,
+          'lastName': lastName,
+          'phone': phone,
+          'description': '500 ETB to verify your account on Yetuga.',
+        }),
+      );
+
+      if (context.mounted) Navigator.of(context).pop();
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final checkoutUrl = data['checkoutUrl'];
+
+        if (checkoutUrl != null && context.mounted) {
+          final verificationStream = FirebaseFirestore.instance
+              .collection('users')
+              .doc(userId)
+              .snapshots();
+
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => PaymentWebView(url: checkoutUrl),
+            ),
+          );
+
+          if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Payment failed or cancelled.'),
-              ),
+                  content: Text('Verifying payment, please wait...')),
             );
-            Navigator.of(context).pop();
           }
-        },
-      );
+
+          // Listen for the verification update
+          final sub = verificationStream.listen((snapshot) {
+            if (snapshot.exists && snapshot.data()?['verified'] == true) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Business verified successfully!')),
+                );
+                _loadUserData(); // Refresh profile data
+              }
+            }
+          });
+
+          // Cancel the listener after a timeout
+          Future.delayed(const Duration(seconds: 60), () {
+            sub.cancel();
+          });
+        } else {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Failed to get payment URL.')),
+            );
+          }
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content:
+                    Text('Error creating payment session: ${response.body}')),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('An error occurred: $e')),
+        );
+      }
     }
   }
 }
