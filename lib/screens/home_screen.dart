@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:yetuga/providers/firebase_provider.dart';
 import 'package:yetuga/widgets/version_nag_banner.dart';
 
 import '../models/event_model.dart';
@@ -30,14 +31,30 @@ import 'qr/qr_scanner_screen.dart';
 import 'search_screen.dart';
 import 'settings/theme_settings_screen.dart';
 
+final currentUserStreamProvider = StreamProvider.autoDispose<DocumentSnapshot>((ref) {
+  final user = ref.watch(currentUserProvider);
+  if (user != null) {
+    // Listen to real-time changes on the user's document
+    return FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots();
+  }
+  // If no user is logged in, return a stream with no data
+  return Stream.empty();
+});
+
 class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({super.key});
+  final String? userId;
+
+  const HomeScreen({super.key, this.userId});
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  Map<String, dynamic>? _userData;
+  bool _isLoading = true;
+  String? _error;
+
   String _currentFilter = "NEW"; // Default filter
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -54,10 +71,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _isRefreshing = false;
   DateTime? _lastRefreshTime;
 
+  Future<void> _loadUserData() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final profileId = widget.userId ?? ref.read(currentUserProvider)?.uid;
+      if (profileId == null) {
+        throw Exception("User not found");
+      }
+
+      final firebaseService = ref.read(firebaseServiceProvider);
+      _userData = await firebaseService.getUserProfileById(profileId);
+      Logger.d('HomeScreen', 'Loaded profile data for user: $profileId');
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      Logger.e('HomeScreen', 'Error loading user data', e);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Failed to load profile: $e';
+        });
+      }
+    }
+  }
+
   // Initialize the page controller in initState to avoid issues
   @override
   void initState() {
     super.initState();
+    _loadUserData();
 
     // Initialize the page controller with the correct initial page
     final initialIndex = _filters.indexOf(_currentFilter);
@@ -433,8 +484,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final userDisplayName = _userData?['displayName'] ?? 'User';
+    final userUsername = _userData?['username'] ?? 'username';
+    final profileImageUrl = _userData?['profileImageUrl'];
+    final isBusinessAccount = _userData?['accountType'] == 'business';
+
     final user = ref.watch(currentUserProvider);
-    final isBusinessAccount = _isBusinessAccount(user, ref.read(onboardingProvider).value);
 
     return FutureBuilder<bool>(
       future: user != null ? _isUserVerified(user.uid) : Future.value(false),
@@ -489,7 +544,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               child: CircleAvatar(
                                 radius: 40,
                                 backgroundColor: Colors.grey[300],
-                                child: _getUserProfileImage(user, null),
+                                child: (profileImageUrl != null && profileImageUrl.isNotEmpty)
+                        ? ClipOval(
+                            child: CachedNetworkImage(
+                              imageUrl: profileImageUrl,
+                              placeholder: (context, url) => const CircularProgressIndicator(),
+                              errorWidget: (context, url, error) => const Icon(Icons.error),
+                              fit: BoxFit.cover,
+                              width: 80,
+                              height: 80,
+                            ),
+                          )
+                        : const Icon(Icons.person, size: 40, color: Colors.white70),
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -503,7 +569,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     children: [
                                       Flexible(
                                         child: Text(
-                                          _getUserDisplayName(user, null),
+                                          userDisplayName,
                                           style: const TextStyle(
                                             color: Colors.white,
                                             fontSize: 20,
@@ -521,7 +587,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     ],
                                   ),
                                   Text(
-                                    '@${_getUserUsername(user, null)}',
+                                    '@$userUsername',
                                     style: const TextStyle(
                                       color: Colors.white70,
                                       fontSize: 16,
@@ -1230,90 +1296,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return _filters[index];
     }
     return "NEW"; // Default to NEW if index is out of bounds
-  }
-
-  // Helper method to check if user has a business account
-  bool _isBusinessAccount(User? user, OnboardingData? onboardingData) {
-    if (user != null && onboardingData != null) {
-      try {
-        final dynamic data = onboardingData;
-        // Check if the 'accountType' property exists and is 'business'
-        if (data.accountType != null) {
-          return data.accountType == 'business';
-        }
-      } catch (e) {
-        Logger.d('HomeScreen',
-            'Could not access "accountType" property on onboardingData: $e');
-      }
-    }
-    return false;
-  }
-
-
-  // Helper method to get user profile image widget
-  Widget _getUserProfileImage(User? user, OnboardingData? onboardingData) {
-    if (user == null) {
-      return const Icon(Icons.person, size: 40, color: Colors.white70);
-    }
-
-    // Use the UserCacheService to get the profile image URL
-    final cacheService = ref.read(userCacheServiceProvider);
-    final imageUrl =
-        cacheService.getProfileImageUrl(user.uid, onboardingData, user);
-
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return const Icon(Icons.person, size: 40, color: Colors.white70);
-    }
-
-    // Generate a unique key that includes both the user ID and a timestamp
-    // This forces the widget to rebuild when the user changes
-    final cacheKey = '${user.uid}_profile_image';
-
-    // Add a timestamp to the URL as a query parameter to bypass cache
-    final timestampedUrl =
-        '$imageUrl${imageUrl.contains('?') ? '&' : '?'}t=${DateTime.now().millisecondsSinceEpoch}';
-
-    Logger.d('HomeScreen',
-        'Loading profile image for user: ${user.uid}, URL: $timestampedUrl');
-
-    return ClipOval(
-      // Use a unique key to force rebuild when user changes
-      key: ValueKey(
-          'profile_image_${user.uid}_${DateTime.now().millisecondsSinceEpoch}'),
-      child: CachedNetworkImage(
-        imageUrl: timestampedUrl,
-        placeholder: (context, url) => const CircularProgressIndicator(),
-        errorWidget: (context, url, error) {
-          Logger.e('HomeScreen', 'Error loading profile image: $error');
-          return const Icon(Icons.error);
-        },
-        fit: BoxFit.cover,
-        width: 80,
-        height: 80,
-        cacheKey: cacheKey,
-        // Disable caching in memory to ensure fresh image is loaded
-        memCacheWidth: null,
-        memCacheHeight: null,
-      ),
-    );
-  }
-
-  // Helper method to get display name
-  String _getUserDisplayName(User? user, OnboardingData? onboardingData) {
-    if (user == null) return 'User';
-
-    // Use the UserCacheService to get the display name
-    final cacheService = ref.read(userCacheServiceProvider);
-    return cacheService.getDisplayName(user.uid, onboardingData, user);
-  }
-
-  // Helper method to get username
-  String _getUserUsername(User? user, OnboardingData? onboardingData) {
-    if (user == null) return 'username';
-
-    // Use the UserCacheService to get the username
-    final cacheService = ref.read(userCacheServiceProvider);
-    return cacheService.getUsername(user.uid, onboardingData, user);
   }
 
   // Helper method to check if the user is authenticated
