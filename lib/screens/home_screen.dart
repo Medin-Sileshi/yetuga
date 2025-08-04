@@ -37,8 +37,6 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-
-
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   String _currentFilter = "NEW"; // Default filter
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -408,6 +406,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  // Check if the user is verified
+  Future<bool> _isUserVerified(String userId) async {
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+      if (userDoc.exists) {
+        return userDoc.data()?['verified'] ?? false;
+      }
+      return false;
+    } catch (e) {
+      Logger.e('HomeScreen', 'Error checking user verification status', e);
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
@@ -419,260 +434,280 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       onboardingData = data;
     });
 
-    return Scaffold(
-      key: _scaffoldKey,
-      // Use theme's background color instead of hardcoding it
+    return FutureBuilder<bool>(
+        future: user != null ? _isUserVerified(user.uid) : Future.value(false),
+        builder: (context, snapshot) {
+        final isVerified = snapshot.data ?? false;
 
-      drawer: Drawer(
-        // Use the same background color as the rest of the app
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              // Custom drawer header with close button
-              Container(
-                height: 200,
-                color: const Color(0xFF0A2942), // Fixed color for both light and dark themes
-                child: Stack(
-                  children: [
-                    // Close button
-                    Positioned(
-                      top: 10,
-                      right: 10,
-                      child: IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ),
-                    // User profile section
-                    Padding(
-                      padding: const EdgeInsets.only(top: 50, left: 16),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // Profile picture with border
-                          Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                // Golden border for business accounts, secondary color for personal
-                                color: _isBusinessAccount(user, onboardingData)
-                                  ? const Color(0xFFFFD700) // Gold color
-                                  : Theme.of(context).colorScheme.secondary,
-                                width: 3,
-                              ),
-                              // Add glow effect for business accounts
-                              boxShadow: _isBusinessAccount(user, onboardingData)
-                                ? [
-                                    BoxShadow(
-                                      color: const Color(0xFFFFD700).withAlpha(128), // 0.5 opacity
-                                      blurRadius: 10,
-                                      spreadRadius: 2,
-                                    )
-                                  ]
-                                : null,
-                            ),
-                            child: CircleAvatar(
-                              radius: 40,
-                              backgroundColor: Colors.grey[300],
-                              child: _getUserProfileImage(user, onboardingData),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          // User info
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  _getUserDisplayName(user, onboardingData),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  '@${_getUserUsername(user, onboardingData)}',
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 16,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            // Profile button
-            ListTile(
-              leading: Icon(Icons.account_circle, color: Theme.of(context).iconTheme.color),
-              title: Text('Profile', style: Theme.of(context).textTheme.titleMedium),
-              onTap: () {
-                Navigator.pop(context); // Close drawer
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ProfileScreen(),
-                  ),
-                );
-              },
-            ),
-            // Notifications button with badge
-            StreamBuilder<int>(
-              stream: ref.read(notificationServiceProvider).getUnreadCount(),
-              builder: (context, snapshot) {
-                final unreadCount = snapshot.data ?? 0;
+        return Scaffold(
+          key: _scaffoldKey,
+          // Use theme's background color instead of hardcoding it
 
-                return ListTile(
-                  leading: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Icon(Icons.notifications, color: Theme.of(context).iconTheme.color),
-                      if (unreadCount > 0)
+          drawer: Drawer(
+            // Use the same background color as the rest of the app
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  // Custom drawer header with close button
+                  Container(
+                    height: 200,
+                    color: const Color(0xFF0A2942), // Fixed color for both light and dark themes
+                    child: Stack(
+                      children: [
+                        // Close button
                         Positioned(
-                          // Position the badge to overlap with the icon
-                          right: 5,
-                          top: 5,
-                          child: NotificationBadge(
-                            count: unreadCount,
-                            size: 8.0,
+                          top: 10,
+                          right: 10,
+                          child: IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white),
+                            onPressed: () => Navigator.pop(context),
                           ),
                         ),
-                    ],
+                        // User profile section
+                        Padding(
+                          padding: const EdgeInsets.only(top: 50, left: 16),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              // Profile picture with border
+                              Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    // Golden border for business accounts, secondary color for personal
+                                    color: _isBusinessAccount(user, onboardingData)
+                                        ? const Color(0xFFFFD700) // Gold color
+                                        : Theme.of(context).colorScheme.secondary,
+                                    width: 3,
+                                  ),
+                                  // Add glow effect for business accounts
+                                  boxShadow: _isBusinessAccount(user, onboardingData)
+                                      ? [
+                                          BoxShadow(
+                                            color: const Color(0xFFFFD700).withAlpha(128), // 0.5 opacity
+                                            blurRadius: 10,
+                                            spreadRadius: 2,
+                                          )
+                                        ]
+                                      : null,
+                                ),
+                                child: CircleAvatar(
+                                  radius: 40,
+                                  backgroundColor: Colors.grey[300],
+                                  child: _getUserProfileImage(user, onboardingData),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              // User info
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            _getUserDisplayName(user, onboardingData),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        if (isVerified)
+                                          const Padding(
+                                            padding: EdgeInsets.only(left: 8.0),
+                                            child: Icon(Icons.verified,
+                                                color: Colors.blue, size: 20),
+                                          ),
+                                      ],
+                                    ),
+                                    Text(
+                                      '@${_getUserUsername(user, onboardingData)}',
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 16,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  title: Text('Notifications', style: Theme.of(context).textTheme.titleMedium),
-                  onTap: () {
-                    Navigator.pop(context); // Close drawer
-                    Navigator.push(
-                      context,
+                  // Profile button
+                  ListTile(
+                    leading: Icon(Icons.account_circle, color: Theme.of(context).iconTheme.color),
+                    title: Text('Profile', style: Theme.of(context).textTheme.titleMedium),
+                    onTap: () {
+                      Navigator.pop(context); // Close drawer
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ProfileScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  // Notifications button with badge
+                  StreamBuilder<int>(
+                    stream: ref.read(notificationServiceProvider).getUnreadCount(),
+                    builder: (context, snapshot) {
+                      final unreadCount = snapshot.data ?? 0;
+
+                      return ListTile(
+                        leading: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Icon(Icons.notifications, color: Theme.of(context).iconTheme.color),
+                            if (unreadCount > 0)
+                              Positioned(
+                                // Position the badge to overlap with the icon
+                                right: 5,
+                                top: 5,
+                                child: NotificationBadge(
+                                  count: unreadCount,
+                                  size: 8.0,
+                                ),
+                              ),
+                          ],
+                        ),
+                        title: Text('Notifications', style: Theme.of(context).textTheme.titleMedium),
+                        onTap: () {
+                          Navigator.pop(context); // Close drawer
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const NotificationsScreen(),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  // Settings button
+                  ListTile(
+                    leading: Icon(Icons.settings, color: Theme.of(context).iconTheme.color),
+                    title: Text('Settings', style: Theme.of(context).textTheme.titleMedium),
+                    onTap: () {
+                      Navigator.pop(context); // Close drawer
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ThemeSettingsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.logout, color: Theme.of(context).iconTheme.color),
+                    title: Text('Sign Out', style: Theme.of(context).textTheme.titleMedium),
+                    onTap: () {
+                      Navigator.pop(context); // Close drawer
+                      _handleSignOut(context);
+                    },
+                  ),
+                ],
+            ),
+          ),
+          body: SafeArea(
+            child: Column(
+              children: [
+                // Custom header with filter tabs
+                HomeHeader(
+                  onMenuPressed: _handleMenuPressed,
+                  onScanPressed: _handleScanPressed,
+                  onFilterChanged: _handleFilterChanged,
+                  currentFilter: _currentFilter,
+                ),
+                // Version nag banner
+                const VersionNagBanner(),
+                // Main content area with swipe support
+                Expanded(
+                  child: PageView.builder(
+                    controller: _pageController,
+                    itemCount: _filters.length,
+                    onPageChanged: (index) {
+                      // Only handle page change if it wasn't triggered by filter change
+                      if (!_isChangingPage) {
+                        _handleFilterChanged(_getFilterName(index));
+                      }
+                    },
+                    itemBuilder: (context, index) {
+                      // Use a key to ensure each page is uniquely identified
+                      return KeyedSubtree(
+                        key: ValueKey('page_${_filters[index]}'),
+                        child: _buildFilteredContent(_filters[index]),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Search floating action button at bottom left
+          floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+          floatingActionButton: Padding(
+            padding: const EdgeInsets.only(left: 30),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Search button at bottom left
+                FloatingActionButton(
+                  heroTag: 'search_fab',
+                  onPressed: () {
+                    // Navigate to the search screen
+                    Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => const NotificationsScreen(),
+                        builder: (context) => const SearchScreen(),
                       ),
                     );
                   },
-                );
-              },
-            ),
-            // Settings button
-            ListTile(
-              leading: Icon(Icons.settings, color: Theme.of(context).iconTheme.color),
-              title: Text('Settings', style: Theme.of(context).textTheme.titleMedium),
-              onTap: () {
-                Navigator.pop(context); // Close drawer
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ThemeSettingsScreen(),
+                  // Make it look like a simple icon button
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  mini: true,
+                  child: Icon(
+                    Icons.search,
+                    color: Theme.of(context).iconTheme.color,
+                    size: 30,
                   ),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.logout, color: Theme.of(context).iconTheme.color),
-              title: Text('Sign Out', style: Theme.of(context).textTheme.titleMedium),
-              onTap: () {
-                Navigator.pop(context); // Close drawer
-                _handleSignOut(context);
-              },
-            ),
-          ],
-        ),
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Custom header with filter tabs
-            HomeHeader(
-              onMenuPressed: _handleMenuPressed,
-              onScanPressed: _handleScanPressed,
-              onFilterChanged: _handleFilterChanged,
-              currentFilter: _currentFilter,
-            ),
-            // Version nag banner
-            const VersionNagBanner(),
-            // Main content area with swipe support
-            Expanded(
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: _filters.length,
-                onPageChanged: (index) {
-                  // Only handle page change if it wasn't triggered by filter change
-                  if (!_isChangingPage) {
-                    _handleFilterChanged(_getFilterName(index));
-                  }
-                },
-                itemBuilder: (context, index) {
-                  // Use a key to ensure each page is uniquely identified
-                  return KeyedSubtree(
-                    key: ValueKey('page_${_filters[index]}'),
-                    child: _buildFilteredContent(_filters[index]),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
+                ),
 
-      // Search floating action button at bottom left
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(left: 30),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            // Search button at bottom left
-            FloatingActionButton(
-              heroTag: 'search_fab',
-              onPressed: () {
-                // Navigate to the search screen
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const SearchScreen(),
+
+
+                // Add button at bottom right
+                FloatingActionButton(
+                  heroTag: 'add_fab',
+                  onPressed: () {
+                    // Show the create event bottom sheet
+                    _showCreateEventSheet(context);
+                  },
+                  // Make it look like a simple icon button
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  mini: true,
+                  child: Icon(
+                    Icons.add,
+                    color: Theme.of(context).iconTheme.color,
+                    size: 30,
                   ),
-                );
-              },
-              // Make it look like a simple icon button
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              mini: true,
-              child: Icon(
-                Icons.search,
-                color: Theme.of(context).iconTheme.color,
-                size: 30,
-              ),
+                ),
+              ],
             ),
-
-
-
-            // Add button at bottom right
-            FloatingActionButton(
-              heroTag: 'add_fab',
-              onPressed: () {
-                // Show the create event bottom sheet
-                _showCreateEventSheet(context);
-              },
-              // Make it look like a simple icon button
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              mini: true,
-              child: Icon(
-                Icons.add,
-                color: Theme.of(context).iconTheme.color,
-                size: 30,
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -1489,17 +1524,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       case 'JOINED':
         // Show events created by the user or joined by the user
         return currentUserId != null &&
-               (event.userId == currentUserId ||
+            (event.userId == currentUserId ||
                 event.joinedBy.contains(currentUserId));
 
       case 'NEW':
         // Show public events, events created by the user, and private events the user is invited to or has joined
         return !event.isPrivate ||
-               (currentUserId != null && (
-                 event.userId == currentUserId ||
-                 event.joinedBy.contains(currentUserId) ||
-                 event.isInvited
-               ));
+            (currentUserId != null && (
+              event.userId == currentUserId ||
+              event.joinedBy.contains(currentUserId) ||
+              event.isInvited
+            ));
 
       case 'SHOW ALL':
       default:
@@ -1508,8 +1543,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         if (currentUserId == null) return false;
 
         return event.userId == currentUserId ||
-               event.joinedBy.contains(currentUserId) ||
-               event.isInvited;
+            event.joinedBy.contains(currentUserId) ||
+            event.isInvited;
     }
   }
 

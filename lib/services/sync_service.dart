@@ -20,7 +20,7 @@ class SyncService {
   final FirestoreConfigService _firestoreConfigService;
 
   // Connectivity stream subscription
-  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   // Sync status
   bool _isSyncing = false;
@@ -43,7 +43,14 @@ class SyncService {
       Logger.d('SyncService', 'Initializing sync service');
 
       // Listen for connectivity changes
-      _connectivitySubscription = Connectivity().onConnectivityChanged.listen(_handleConnectivityChange);
+      _connectivitySubscription = Connectivity()
+          .onConnectivityChanged
+          .listen((List<ConnectivityResult> results) {
+        if (results.contains(ConnectivityResult.mobile) || results.contains(ConnectivityResult.wifi)) {
+          // We're online, try to sync pending operations
+          syncPendingOperations();
+        }
+      });
 
       // Start periodic sync
       _startPeriodicSync();
@@ -54,23 +61,14 @@ class SyncService {
     }
   }
 
-  // Handle connectivity changes
-  void _handleConnectivityChange(ConnectivityResult result) async {
-    Logger.d('SyncService', 'Connectivity changed: $result');
-
-    if (result == ConnectivityResult.mobile || result == ConnectivityResult.wifi) {
-      // We're online, try to sync pending operations
-      await syncPendingOperations();
-    }
-  }
-
   // Start periodic sync
   void _startPeriodicSync() {
     _syncTimer?.cancel();
     _syncTimer = Timer.periodic(_syncInterval, (timer) async {
       await syncData();
     });
-    Logger.d('SyncService', 'Periodic sync started with interval: $_syncInterval');
+    Logger.d(
+        'SyncService', 'Periodic sync started with interval: $_syncInterval');
   }
 
   // Set sync interval
@@ -167,21 +165,24 @@ class SyncService {
         _eventCacheService.updateEvent(event);
       }
 
-      Logger.d('SyncService', 'Synced ${allEvents.length} events for user: ${user.uid}');
+      Logger.d('SyncService',
+          'Synced ${allEvents.length} events for user: ${user.uid}');
     } catch (e) {
       Logger.e('SyncService', 'Error syncing user events', e);
     }
   }
 
   // Add a pending operation
-  void addPendingOperation(String collection, String operation, Map<String, dynamic> data) {
+  void addPendingOperation(
+      String collection, String operation, Map<String, dynamic> data) {
     _pendingOperations.add({
       'collection': collection,
       'operation': operation,
       'data': data,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     });
-    Logger.d('SyncService', 'Added pending operation: $operation on $collection');
+    Logger.d(
+        'SyncService', 'Added pending operation: $operation on $collection');
 
     // Try to sync immediately if possible
     syncPendingOperations();
@@ -194,12 +195,14 @@ class SyncService {
     }
 
     try {
-      Logger.d('SyncService', 'Syncing ${_pendingOperations.length} pending operations');
+      Logger.d('SyncService',
+          'Syncing ${_pendingOperations.length} pending operations');
 
       // Check if we're online
       final isOnline = await _firestoreConfigService.isOnline();
       if (!isOnline) {
-        Logger.d('SyncService', 'Device is offline, cannot sync pending operations');
+        Logger.d(
+            'SyncService', 'Device is offline, cannot sync pending operations');
         return;
       }
 
@@ -223,18 +226,25 @@ class SyncService {
                 // Remove id from data before updating
                 final updateData = Map<String, dynamic>.from(data);
                 updateData.remove('id');
-                await FirebaseFirestore.instance.collection(collection).doc(docId).update(updateData);
+                await FirebaseFirestore.instance
+                    .collection(collection)
+                    .doc(docId)
+                    .update(updateData);
               }
               break;
             case 'delete':
               final docId = data['id'];
               if (docId != null) {
-                await FirebaseFirestore.instance.collection(collection).doc(docId).delete();
+                await FirebaseFirestore.instance
+                    .collection(collection)
+                    .doc(docId)
+                    .delete();
               }
               break;
           }
 
-          Logger.d('SyncService', 'Successfully processed operation: $operation on $collection');
+          Logger.d('SyncService',
+              'Successfully processed operation: $operation on $collection');
         } catch (e) {
           Logger.e('SyncService', 'Error processing operation', e);
           // Add back to pending operations
@@ -242,7 +252,8 @@ class SyncService {
         }
       }
 
-      Logger.d('SyncService', 'Pending operations sync completed, ${_pendingOperations.length} operations remaining');
+      Logger.d('SyncService',
+          'Pending operations sync completed, ${_pendingOperations.length} operations remaining');
     } catch (e) {
       Logger.e('SyncService', 'Error syncing pending operations', e);
     }

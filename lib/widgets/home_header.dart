@@ -6,7 +6,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../services/notification_service.dart';
 import 'notification_badge.dart';
 
-final connectivityProvider = StreamProvider<ConnectivityResult>((ref) {
+final connectivityProvider = StreamProvider<List<ConnectivityResult>>((ref) {
   return Connectivity().onConnectivityChanged;
 });
 
@@ -30,14 +30,14 @@ class HomeHeader extends ConsumerStatefulWidget {
 
 class _HomeHeaderState extends ConsumerState<HomeHeader> {
   bool _isOffline = false;
-  late final StreamSubscription<ConnectivityResult> _connectivitySubscription;
+  late final StreamSubscription<List<ConnectivityResult>> _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
       setState(() {
-        _isOffline = result == ConnectivityResult.none;
+        _isOffline = results.contains(ConnectivityResult.none);
       });
     });
   }

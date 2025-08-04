@@ -1,32 +1,49 @@
 import 'package:hive/hive.dart';
+import 'onboarding_data.dart';
 
 part 'business_onboarding_data.g.dart';
 
 @HiveType(typeId: 1)
-class BusinessOnboardingData extends HiveObject {
-  @HiveField(0)
-  String? accountType;
-
-  @HiveField(1)
+class BusinessOnboardingData extends OnboardingData {
+  @HiveField(8)
   String? businessName;
 
-  @HiveField(2)
+  @HiveField(9)
   DateTime? establishedDate;
 
-  @HiveField(3)
-  String? phoneNumber;
-
-  @HiveField(4)
-  String? profileImageUrl;
-
-  @HiveField(5)
+  @HiveField(10)
   List<String>? businessTypes;
 
-  @HiveField(6)
-  String? username;
+  @HiveField(11)
+  bool verified = false;
 
-  @HiveField(7)
-  bool onboardingCompleted = false;
+  BusinessOnboardingData({
+    String? accountType,
+    this.businessName,
+    this.establishedDate,
+    String? phoneNumber,
+    String? profileImageUrl,
+    this.businessTypes,
+    String? username,
+    String? displayName,
+    DateTime? birthday,
+    List<String>? interests,
+    bool onboardingCompleted = false,
+    this.verified = false,
+  }) : super() {
+    this.accountType = accountType;
+    this.username = username;
+    this.displayName = displayName;
+    this.birthday = birthday;
+    this.phoneNumber = phoneNumber;
+    this.profileImageUrl = profileImageUrl;
+    this.interests = interests;
+    this.onboardingCompleted = onboardingCompleted;
+  }
+
+  void setVerified(bool value) {
+    verified = value;
+  }
 
   bool isStepComplete(int step) {
     switch (step) {
@@ -51,13 +68,9 @@ class BusinessOnboardingData extends HiveObject {
   }
 
   bool isComplete() {
-    // If onboardingCompleted is explicitly set to true (from Firebase), return true
     if (onboardingCompleted) {
-      // Onboarding is already marked as completed
       return true;
     }
-
-    // Otherwise, check if all fields are filled
     final complete = accountType != null &&
         businessName != null &&
         username != null &&
@@ -66,7 +79,6 @@ class BusinessOnboardingData extends HiveObject {
         profileImageUrl != null &&
         businessTypes != null &&
         businessTypes!.isNotEmpty;
-
     return complete;
   }
 
@@ -81,6 +93,7 @@ class BusinessOnboardingData extends HiveObject {
         'profileImageUrl: $profileImageUrl, '
         'businessTypes: $businessTypes, '
         'onboardingCompleted: $onboardingCompleted, '
+        'verified: $verified, '
         'isComplete: ${isComplete()}'
         '}';
   }

@@ -133,6 +133,7 @@ class FirebaseService {
         // Add business-specific fields
         userData['businessTypes'] = businessTypes;
         userData['establishedDate'] = Timestamp.fromDate(establishedDate);
+        userData['verified'] = false; // Add verified field for business accounts
       } else {
         // Personal account validation
         if (birthday == null) {

@@ -99,14 +99,14 @@ class OnboardingNotifier extends StateNotifier<AsyncValue<OnboardingData>> {
       final data = await storageService.syncWithFirebase(userId);
 
       if (data != null) {
-        Logger.d('OnboardingProvider', 'OnboardingNotifier: Data synced from Firebase: $data');
+        Logger.d('OnboardingProvider', 'OnboardingNotifier: Data synced from Databse: $data');
         state = AsyncValue.data(data);
       } else {
-        Logger.d('OnboardingProvider', 'OnboardingNotifier: No data found in Firebase, using empty data');
+        Logger.d('OnboardingProvider', 'OnboardingNotifier: No data found in Databse, using empty data');
         state = AsyncValue.data(OnboardingData());
       }
     } catch (e) {
-      Logger.d('OnboardingProvider', 'OnboardingNotifier: Error syncing with Firebase: $e');
+      Logger.d('OnboardingProvider', 'OnboardingNotifier: Error syncing with Databse: $e');
       // Don't update state to error to avoid breaking the UI
       // Just keep the current state
     }

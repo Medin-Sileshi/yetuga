@@ -51,11 +51,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   // Method to sync with Firebase
   Future<void> _syncWithFirebase() async {
     try {
-      Logger.d(_logTag, 'Syncing with Firebase...');
+      Logger.d(_logTag, 'Syncing with Database...');
       await ref.read(onboardingProvider.notifier).syncWithFirebase();
-      Logger.d(_logTag, 'Sync with Firebase completed');
+      Logger.d(_logTag, 'Sync with Databse completed');
     } catch (e) {
-      Logger.e(_logTag, 'Error syncing with Firebase', e);
+      Logger.e(_logTag, 'Error syncing with Databse', e);
     }
   }
 
