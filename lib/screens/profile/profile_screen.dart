@@ -61,7 +61,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       _userData = await firebaseService.getUserProfileById(profileId);
       Logger.d('ProfileScreen', 'Loaded profile data for user: $profileId');
 
-      if (widget.userId != null && widget.userId != ref.read(currentUserProvider)?.uid) {
+      if (widget.userId != null &&
+          widget.userId != ref.read(currentUserProvider)?.uid) {
         await _loadFollowData();
       } else {
         await _loadFollowCounts(profileId);
@@ -121,7 +122,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final theme = Theme.of(context);
     final currentUser = ref.watch(currentUserProvider);
 
-    final isCurrentUserProfile = widget.userId == null || widget.userId == currentUser?.uid;
+    final isCurrentUserProfile =
+        widget.userId == null || widget.userId == currentUser?.uid;
     final isBusiness = _userData?['accountType'] == 'business';
     final isVerified = _userData?['verified'] == true;
 
@@ -137,30 +139,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               : _userData == null
                   ? const Center(child: Text('User profile not found'))
                   : SingleChildScrollView(
-                      padding: const EdgeInsets.all(16.0),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          _buildProfileHeader(isCurrentUserProfile, isBusiness, isVerified),
+                          _buildProfileBanner(
+                              isCurrentUserProfile, isBusiness, isVerified),
                           const SizedBox(height: 16),
                           if (!isCurrentUserProfile)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 16.0),
-                              child: _buildFollowButton(),
-                            ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                _buildCountItem('Followers', _followersCount),
-                                const SizedBox(width: 32),
-                                _buildCountItem('Following', _followingCount),
-                              ],
-                            ),
-                          ),
                           if (isCurrentUserProfile && isBusiness && !isVerified)
-                            BusinessVerifyBanner(onVerify: _handleVerifyBusiness),
+                            BusinessVerifyBanner(
+                                onVerify: _handleVerifyBusiness),
                           _buildJoinedEventsSection(),
                         ],
                       ),
@@ -168,148 +155,187 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _buildProfileHeader(bool isCurrentUserProfile, bool isBusiness, bool isVerified) {
+  Widget _buildProfileBanner(
+      bool isCurrentUserProfile, bool isBusiness, bool isVerified) {
     final userDisplayName = _userData?['displayName'] ?? 'User';
     final userUsername = _userData?['username'] ?? 'username';
     final profileImageUrl = _userData?['profileImageUrl'];
+    final businessType = _userData?['businessTypes'] ?? 'Business';
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 24.0, horizontal: 16.0),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            isBusiness
-                ? const Color(0xFFFFD700).withAlpha(50)
-                : Theme.of(context).colorScheme.primary.withAlpha(30),
-            Theme.of(context).scaffoldBackgroundColor,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
+      decoration: const BoxDecoration(
+        color: Color(0xFF0A2942),
       ),
       child: Column(
         children: [
-          GestureDetector(
-            onTap: isCurrentUserProfile
-                ? () => _showProfileImagePickerDialog(context, ref.read(currentUserProvider)!)
-                : null,
-            child: Stack(
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isBusiness
-                          ? const Color(0xFFFFD700)
-                          : Theme.of(context).colorScheme.secondary,
-                      width: 3,
-                    ),
-                  ),
-                  child: CircleAvatar(
-                    radius: 60,
-                    backgroundColor: Colors.grey[300],
-                    child: (profileImageUrl != null && profileImageUrl.isNotEmpty)
-                        ? ClipOval(
-                            child: CachedNetworkImage(
-                              imageUrl: profileImageUrl,
-                              placeholder: (context, url) => const CircularProgressIndicator(),
-                              errorWidget: (context, url, error) => const Icon(Icons.error),
-                              fit: BoxFit.cover,
-                              width: 120,
-                              height: 120,
-                            ),
-                          )
-                        : const Icon(Icons.person, size: 60, color: Colors.white70),
-                  ),
-                ),
-                if (isCurrentUserProfile)
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.edit,
-                        size: 20,
-                        color: Theme.of(context).colorScheme.onPrimary,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start, // Align to top
             children: [
-              Text(
-                userDisplayName,
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineMedium
-                    ?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              if (isBusiness && isVerified)
-                const Padding(
-                  padding: EdgeInsets.only(left: 8.0),
-                  child: Icon(Icons.verified, color: Colors.blue, size: 20),
+              // Profile Image Section
+              Padding(
+                padding: const EdgeInsets.only(left: 20, top: 40, bottom: 40),
+      child: _buildProfileImageSection(
+          isCurrentUserProfile, isBusiness, profileImageUrl),
+    ),
+              const SizedBox(width: 16),
+              // User Info Section
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 40, bottom: 40),
+                  child: _buildUserInfoSection(
+                      userDisplayName, userUsername, isBusiness, isVerified),
                 ),
+              ),
+              // Right Section with Events Count and Options
+              Padding(
+                padding: const EdgeInsets.only(top: 0, right: 0),
+                child: _buildRightSection(
+                    isCurrentUserProfile, isBusiness, businessType[0]),
+              ),
             ],
           ),
-          Text(
-            '@$userUsername',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Theme.of(context).textTheme.bodySmall?.color,
-                ),
-          ),
-          if (isBusiness)
-            Container(
-              margin: const EdgeInsets.only(top: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFD700).withAlpha(50),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFFFD700), width: 1),
-              ),
-              child: const Text(
-                'Business Account',
-                style: TextStyle(
-                  color: Color(0xFFFFD700),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
-            ),
         ],
       ),
     );
   }
 
-  Widget _buildFollowButton() {
-    return _isFollowLoading
-        ? const CircularProgressIndicator()
-        : ElevatedButton(
-            onPressed: _handleFollowButtonPressed,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _isFollowing
-                  ? Colors.grey[300]
-                  : Theme.of(context).colorScheme.primary,
-              foregroundColor: _isFollowing
-                  ? Colors.black87
-                  : Theme.of(context).colorScheme.onPrimary,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+  Widget _buildProfileImageSection(
+      bool isCurrentUserProfile, bool isBusiness, String? profileImageUrl) {
+    return Stack(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isBusiness ? const Color(0xFFE6C34E) : const Color(0xFF29C7E4),
+              width: 3,
+            ),
+          ),
+          child: CircleAvatar(
+            radius: 35,
+            backgroundColor: Colors.grey[300],
+            child: (profileImageUrl != null && profileImageUrl.isNotEmpty)
+                ? ClipOval(
+                    child: CachedNetworkImage(
+                      imageUrl: profileImageUrl,
+                      placeholder: (context, url) =>
+                          const CircularProgressIndicator(),
+                      errorWidget: (context, url, error) =>
+                          const Icon(Icons.error),
+                      fit: BoxFit.cover,
+                      width: 120,
+                      height: 120,
+                    ),
+                  )
+                : const Icon(Icons.person, size: 60, color: Colors.white70),
+          ),
+        ),
+        // Show add icon only if not following and not current user
+        if (!isCurrentUserProfile && !_isFollowing)
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: GestureDetector(
+              onTap: _handleFollowButtonPressed,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF0A2942), width: 2),
+                ),
+                child: const Icon(
+                  Icons.add,
+                  size: 20,
+                  color: Color(0xFF0A2942),
+                ),
               ),
             ),
-            child: Text(_isFollowing ? 'Unfollow' : 'Follow'),
-          );
+          ),
+      ],
+    );
+  }
+
+  Widget _buildUserInfoSection(String userDisplayName, String userUsername,
+      bool isBusiness, bool isVerified) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              userDisplayName,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (isBusiness && isVerified)
+              const Padding(
+                padding: EdgeInsets.only(left: 2.0),
+                child: Icon(Icons.verified, color: Colors.blue, size: 20),
+              ),
+          ],
+        ),
+        Text(
+          '@$userUsername',
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            _buildCountItem('Following', _followingCount),
+            const SizedBox(width: 32),
+            _buildCountItem('Followers', _followersCount),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRightSection(
+      bool isCurrentUserProfile, bool isBusiness, String businessType) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        // Business Type Label
+        if (isBusiness)
+          Container(
+            // Remove top margin for flush alignment
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFFD700),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(16),
+                bottomLeft: Radius.circular(16),
+              ),
+            ),
+            child: Text(
+              businessType,
+              style: const TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        // Options Menu
+        IconButton(
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          onPressed: () => _showOptionsMenu(isCurrentUserProfile),
+          icon: const Icon(
+            Icons.more_vert,
+            color: Colors.white,
+            size: 24,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildCountItem(String label, int count) {
@@ -317,15 +343,65 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       children: [
         Text(
           count.toString(),
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+          ),
         ),
-        const SizedBox(height: 4),
-        Text(label),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+          ),
+        ),
       ],
     );
   }
 
-  Future<void> _showProfileImagePickerDialog(BuildContext context, User user) async {
+  void _showOptionsMenu(bool isCurrentUserProfile) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isCurrentUserProfile)
+              ListTile(
+                leading: const Icon(Icons.edit),
+                title: const Text('Edit Profile Picture'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showProfileImagePickerDialog(
+                      context, ref.read(currentUserProvider)!);
+                },
+              )
+            else
+              ListTile(
+                leading:
+                    Icon(_isFollowing ? Icons.person_remove : Icons.person_add),
+                title: Text(_isFollowing ? 'Unfollow' : 'Follow'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _handleFollowButtonPressed();
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.close),
+              title: const Text('Cancel'),
+              onTap: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showProfileImagePickerDialog(
+      BuildContext context, User user) async {
     // Get current profile image URL
     String? currentImageUrl;
     if (user.photoURL != null) {
@@ -480,8 +556,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         if (mounted) {
           final scaffoldMessenger = ScaffoldMessenger.of(context);
           scaffoldMessenger.showSnackBar(SnackBar(
-              content:
-                  Text('Unfollowed ${_userData?['displayName']}')));
+              content: Text('Unfollowed ${_userData?['displayName']}')));
         }
       } else {
         // Follow user
@@ -493,8 +568,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         if (mounted) {
           final scaffoldMessenger = ScaffoldMessenger.of(context);
           scaffoldMessenger.showSnackBar(SnackBar(
-              content:
-                  Text('Following ${_userData?['displayName']}')));
+              content: Text('Following ${_userData?['displayName']}')));
         }
       }
     } catch (e) {
