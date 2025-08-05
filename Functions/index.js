@@ -3,7 +3,6 @@ const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const express = require("express");
 const cors = require("cors");
-const { v4: uuidv4 } = require("uuid");
 const fetch = require("node-fetch");
 const crypto = require("crypto");
 
@@ -42,7 +41,7 @@ app.post("/create-payment-session", async (req, res) => {
       return res.status(400).send({ error: "Missing required fields." });
     }
 
-    const txRef = `yetuga_${userId}_${Date.now()}_${uuidv4()}`;
+    const txRef = `yetuga_${userId}_${Date.now()}`;
 
     const paymentData = {
       amount: String(amount),
