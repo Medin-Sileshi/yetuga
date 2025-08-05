@@ -144,10 +144,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           _buildProfileBanner(
                               isCurrentUserProfile, isBusiness, isVerified),
                           const SizedBox(height: 16),
-                          if (!isCurrentUserProfile)
-                          if (isCurrentUserProfile && isBusiness && !isVerified)
-                            BusinessVerifyBanner(
-                                onVerify: _handleVerifyBusiness),
+                            if (isCurrentUserProfile &&
+                                isBusiness &&
+                                !isVerified)
+                              BusinessVerifyBanner(
+                                  onVerify: _handleVerifyBusiness),
                           _buildJoinedEventsSection(),
                         ],
                       ),
@@ -175,9 +176,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               // Profile Image Section
               Padding(
                 padding: const EdgeInsets.only(left: 20, top: 40, bottom: 40),
-      child: _buildProfileImageSection(
-          isCurrentUserProfile, isBusiness, profileImageUrl),
-    ),
+                child: _buildProfileImageSection(
+                    isCurrentUserProfile, isBusiness, profileImageUrl),
+              ),
               const SizedBox(width: 16),
               // User Info Section
               Expanded(
@@ -208,7 +209,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(
-              color: isBusiness ? const Color(0xFFE6C34E) : const Color(0xFF29C7E4),
+              color: isBusiness
+                  ? const Color(0xFFE6C34E)
+                  : const Color(0xFF29C7E4),
               width: 3,
             ),
           ),

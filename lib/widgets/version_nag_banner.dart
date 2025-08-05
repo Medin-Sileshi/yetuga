@@ -82,7 +82,8 @@ class _VersionNagBannerState extends State<VersionNagBanner> {
             TextButton(
               onPressed: () async {
                 final url = Uri.parse(_updateUrl!);
-                if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+                if (!await launchUrl(url,
+                    mode: LaunchMode.externalApplication)) {
                   throw Exception('Could not launch $url');
                 }
               },
