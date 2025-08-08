@@ -38,10 +38,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   int _followersCount = 0;
   int _followingCount = 0;
 
+  // Navigation state
+  String _currentTab = "Events"; // Default tab
+  late final PageController _pageController;
+  bool _isChangingPage = false;
+
   @override
   void initState() {
     super.initState();
     _loadUserData();
+
+    // Initialize page controller
+    _pageController = PageController(initialPage: 0, keepPage: true);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUserData() async {
@@ -138,20 +152,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ? Center(child: Text(_error!))
               : _userData == null
                   ? const Center(child: Text('User profile not found'))
-                  : SingleChildScrollView(
-                      child: Column(
-                        children: [
-                          _buildProfileBanner(
-                              isCurrentUserProfile, isBusiness, isVerified),
-                          const SizedBox(height: 16),
-                            if (isCurrentUserProfile &&
-                                isBusiness &&
-                                !isVerified)
-                              BusinessVerifyBanner(
-                                  onVerify: _handleVerifyBusiness),
-                          _buildJoinedEventsSection(),
-                        ],
-                      ),
+                  : Column(
+                      children: [
+                        _buildProfileBanner(
+                            isCurrentUserProfile, isBusiness, isVerified),
+                        const SizedBox(height: 16),
+                        if (isCurrentUserProfile && isBusiness && !isVerified)
+                          BusinessVerifyBanner(onVerify: _handleVerifyBusiness),
+                        // Navigation tabs
+                        _buildNavigationTabs(isBusiness),
+                        // Main content area
+                        Expanded(
+                          child: _buildTabContent(),
+                        ),
+                      ],
                     ),
     );
   }
@@ -448,6 +462,684 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         setState(() {});
       }
     }
+  }
+
+  Widget _buildNavigationTabs(bool isBusiness) {
+    // Determine available tabs based on account type
+    List<String> tabs = [];
+
+    if (isBusiness) {
+      // For business accounts, check businessTypes
+      final businessTypes = _userData?['businessTypes'] ?? [];
+      final isRestaurant = businessTypes.contains('Restaurant');
+
+      if (isRestaurant) {
+        tabs = ["Menu", "Events"];
+      } else {
+        tabs = ["Services", "Events"];
+      }
+    } else {
+      // For personal accounts, only show Events
+      tabs = ["Events"];
+    }
+
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 32.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: tabs
+            .map((tab) => Expanded(
+                  child: _buildTab(tab, _currentTab == tab),
+                ))
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _buildTab(String label, bool isSelected) {
+    return GestureDetector(
+      onTap: () => _handleTabChanged(label),
+      child: Container(
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: isSelected
+                ? Theme.of(context).textTheme.bodyLarge?.color
+                : Theme.of(context).textTheme.bodyLarge?.color?.withAlpha(128),
+            fontWeight: isSelected ? FontWeight.w400 : FontWeight.w300,
+            fontSize: 22,
+            letterSpacing: 1.2,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handleTabChanged(String tab) {
+    // Prevent infinite loop
+    if (_isChangingPage) {
+      Logger.d('ProfileScreen',
+          'Ignoring tab change to $tab because page is already changing');
+      return;
+    }
+
+    // Don't do anything if the tab hasn't changed
+    if (_currentTab == tab) {
+      Logger.d('ProfileScreen', 'Tab is already set to $tab, ignoring');
+      return;
+    }
+
+    Logger.d('ProfileScreen', 'Handling tab change from $_currentTab to $tab');
+
+    setState(() {
+      _currentTab = tab;
+    });
+
+    // Update page view to match selected tab
+    int index = _getTabIndex(tab);
+    if (index != -1 && _pageController.hasClients) {
+      Logger.d('ProfileScreen', 'Animating to page $index for tab $tab');
+      _isChangingPage = true;
+      _pageController
+          .animateToPage(
+        index,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      )
+          .then((_) {
+        if (mounted) {
+          setState(() {
+            _isChangingPage = false;
+          });
+        }
+        Logger.d('ProfileScreen', 'Animation to page $index completed');
+      }).catchError((error) {
+        if (mounted) {
+          setState(() {
+            _isChangingPage = false;
+          });
+        }
+        Logger.e('ProfileScreen', 'Error animating to page $index', error);
+      });
+    }
+
+    Logger.d('ProfileScreen', 'Tab changed to: $_currentTab');
+  }
+
+  int _getTabIndex(String tab) {
+    final isBusiness = _userData?['accountType'] == 'business';
+    List<String> tabs = [];
+
+    if (isBusiness) {
+      final businessTypes = _userData?['businessTypes'] ?? [];
+      final isRestaurant = businessTypes.contains('Restaurant');
+
+      if (isRestaurant) {
+        tabs = ["Menu", "Events"];
+      } else {
+        tabs = ["Services", "Events"];
+      }
+    } else {
+      tabs = ["Events"];
+    }
+
+    return tabs.indexOf(tab);
+  }
+
+  Widget _buildTabContent() {
+    return PageView.builder(
+      controller: _pageController,
+      itemCount: _getTotalTabCount(),
+      onPageChanged: (index) {
+        // Only handle page change if it wasn't triggered by tab change
+        if (!_isChangingPage) {
+          final tab = _getTabByIndex(index);
+          _handleTabChanged(tab);
+        }
+      },
+      itemBuilder: (context, index) {
+        final tab = _getTabByIndex(index);
+        return KeyedSubtree(
+          key: ValueKey('page_${tab}'),
+          child: _buildTabContentForTab(tab),
+        );
+      },
+    );
+  }
+
+  int _getTotalTabCount() {
+    final isBusiness = _userData?['accountType'] == 'business';
+
+    if (isBusiness) {
+      final businessTypes = _userData?['businessTypes'] ?? [];
+      final isRestaurant = businessTypes.contains('Restaurant');
+
+      return isRestaurant ? 2 : 2; // Menu/Services + Events
+    } else {
+      return 1; // Only Events
+    }
+  }
+
+  String _getTabByIndex(int index) {
+    final isBusiness = _userData?['accountType'] == 'business';
+
+    if (isBusiness) {
+      final businessTypes = _userData?['businessTypes'] ?? [];
+      final isRestaurant = businessTypes.contains('Restaurant');
+
+      if (isRestaurant) {
+        return index == 0 ? "Menu" : "Events";
+      } else {
+        return index == 0 ? "Services" : "Events";
+      }
+    } else {
+      return "Events";
+    }
+  }
+
+  Widget _buildTabContentForTab(String tab) {
+    switch (tab) {
+      case "Menu":
+        return _buildMenuContent();
+      case "Services":
+        return _buildServicesContent();
+      case "Events":
+        return _buildEventsContent();
+      default:
+        return _buildEventsContent();
+    }
+  }
+
+  Widget _buildMenuContent() {
+    final isCurrentUserProfile = widget.userId == null ||
+        widget.userId == ref.read(currentUserProvider)?.uid;
+
+    return _buildScrollableContent(
+      'menu',
+      isCurrentUserProfile,
+      'Add Menu Item',
+      Icons.restaurant_menu,
+    );
+  }
+
+  Widget _buildServicesContent() {
+    final isCurrentUserProfile = widget.userId == null ||
+        widget.userId == ref.read(currentUserProvider)?.uid;
+
+    return _buildScrollableContent(
+      'services',
+      isCurrentUserProfile,
+      'Add Service',
+      Icons.miscellaneous_services,
+    );
+  }
+
+  Widget _buildScrollableContent(String fieldName, bool isCurrentUserProfile,
+      String addButtonText, IconData icon) {
+    final items = _userData?[fieldName] as List<dynamic>? ?? [];
+
+    if (items.isEmpty && isCurrentUserProfile) {
+      // Show add button for current user when no items exist
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 64,
+              color: Theme.of(context).disabledColor,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No ${fieldName == 'menu' ? 'Menu Items' : 'Services'} Yet',
+              style: TextStyle(
+                fontSize: 18,
+                color: Theme.of(context).textTheme.bodyLarge?.color,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Add your first ${fieldName == 'menu' ? 'menu item' : 'service'} to get started',
+              style: TextStyle(
+                fontSize: 14,
+                color: Theme.of(context).textTheme.bodyMedium?.color,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => _showAddItemDialog(fieldName),
+              icon: Icon(Icons.add),
+              label: Text(addButtonText),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (items.isEmpty) {
+      // Show empty state for other users
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 64,
+              color: Theme.of(context).disabledColor,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No ${fieldName == 'menu' ? 'Menu Items' : 'Services'} Available',
+              style: TextStyle(
+                fontSize: 18,
+                color: Theme.of(context).textTheme.bodyLarge?.color,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'This ${fieldName == 'menu' ? 'restaurant' : 'business'} hasn\'t added any ${fieldName == 'menu' ? 'menu items' : 'services'} yet',
+              style: TextStyle(
+                fontSize: 14,
+                color: Theme.of(context).textTheme.bodyMedium?.color,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show items in a scrollable list
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // Add button at the top for current user
+          if (isCurrentUserProfile)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: ElevatedButton.icon(
+                onPressed: () => _showAddItemDialog(fieldName),
+                icon: const Icon(Icons.add),
+                label: Text(addButtonText),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+              ),
+            ),
+          // Scrollable list of items
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index] as Map<String, dynamic>;
+              return _buildItemCard(
+                  item, fieldName, index, isCurrentUserProfile);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildItemCard(Map<String, dynamic> item, String fieldName, int index,
+      bool isCurrentUserProfile) {
+    final name = item['name'] ??
+        '[ ${fieldName == 'menu' ? 'food name' : 'service name'} ]';
+    final description = item['description'] ??
+        '[ ${fieldName == 'menu' ? 'ingredients' : 'what the service includes'} ]';
+    final price = item['price'] ?? '[ price ]';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12.0),
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A2942), // Dark teal color matching the image
+        borderRadius: BorderRadius.circular(12.0),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Left side - Name and description
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Right side - Price and edit button
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '$price ETB',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (isCurrentUserProfile)
+                IconButton(
+                  onPressed: () => _showEditItemDialog(fieldName, index, item),
+                  icon: const Icon(
+                    Icons.edit,
+                    color: Colors.white70,
+                    size: 20,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddItemDialog(String fieldName) {
+    final nameController = TextEditingController();
+    final descriptionController = TextEditingController();
+    final priceController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Add ${fieldName == 'menu' ? 'Menu Item' : 'Service'}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: InputDecoration(
+                labelText: fieldName == 'menu' ? 'Food Name' : 'Service Name',
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: descriptionController,
+              decoration: InputDecoration(
+                labelText: fieldName == 'menu' ? 'Ingredients' : 'Description',
+                border: const OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: priceController,
+              decoration: const InputDecoration(
+                labelText: 'Price (ETB)',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (nameController.text.isNotEmpty &&
+                  priceController.text.isNotEmpty) {
+                await _addItem(fieldName, {
+                  'name': nameController.text,
+                  'description': descriptionController.text,
+                  'price': priceController.text,
+                });
+                if (context.mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addItem(String fieldName, Map<String, dynamic> item) async {
+    try {
+      final userId = ref.read(currentUserProvider)?.uid;
+      if (userId == null) return;
+
+      final firebaseService = ref.read(firebaseServiceProvider);
+      final currentItems = _userData?[fieldName] as List<dynamic>? ?? [];
+      currentItems.add(item);
+
+      await firebaseService.updateUserField(userId, fieldName, currentItems);
+
+      // Refresh user data
+      await _loadUserData();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  '${fieldName == 'menu' ? 'Menu item' : 'Service'} added successfully')),
+        );
+      }
+    } catch (e) {
+      Logger.e('ProfileScreen', 'Error adding $fieldName item', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'Error adding ${fieldName == 'menu' ? 'menu item' : 'service'}: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _updateItem(
+      String fieldName, int index, Map<String, dynamic> item) async {
+    try {
+      final userId = ref.read(currentUserProvider)?.uid;
+      if (userId == null) return;
+
+      final firebaseService = ref.read(firebaseServiceProvider);
+      final currentItems = _userData?[fieldName] as List<dynamic>? ?? [];
+
+      if (index < currentItems.length) {
+        currentItems[index] = item;
+        await firebaseService.updateUserField(userId, fieldName, currentItems);
+
+        // Refresh user data
+        await _loadUserData();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text(
+                    '${fieldName == 'menu' ? 'Menu item' : 'Service'} updated successfully')),
+          );
+        }
+      }
+    } catch (e) {
+      Logger.e('ProfileScreen', 'Error updating $fieldName item', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'Error updating ${fieldName == 'menu' ? 'menu item' : 'service'}: $e')),
+        );
+      }
+    }
+  }
+
+  void _showEditItemDialog(
+      String fieldName, int index, Map<String, dynamic> item) {
+    final nameController = TextEditingController(text: item['name'] ?? '');
+    final descriptionController =
+        TextEditingController(text: item['description'] ?? '');
+    final priceController = TextEditingController(text: item['price'] ?? '');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Edit ${fieldName == 'menu' ? 'Menu Item' : 'Service'}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: InputDecoration(
+                labelText: fieldName == 'menu' ? 'Food Name' : 'Service Name',
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: descriptionController,
+              decoration: InputDecoration(
+                labelText: fieldName == 'menu' ? 'Ingredients' : 'Description',
+                border: const OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: priceController,
+              decoration: const InputDecoration(
+                labelText: 'Price (ETB)',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (nameController.text.isNotEmpty &&
+                  priceController.text.isNotEmpty) {
+                await _updateItem(fieldName, index, {
+                  'name': nameController.text,
+                  'description': descriptionController.text,
+                  'price': priceController.text,
+                });
+                if (context.mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEventsContent() {
+    // Get the user ID (current user or profile user)
+    final userId = widget.userId ?? ref.read(currentUserProvider)?.uid;
+    final currentUserId = ref.read(currentUserProvider)?.uid;
+
+    if (userId == null) {
+      return const SizedBox.shrink();
+    }
+
+    // Get the event service
+    final eventService = ref.read(eventServiceProvider);
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // All Events Section using EventFeedCard
+          StreamBuilder<List<EventModel>>(
+            stream: eventService.getUserEventsFromArrays(userId, limit: 20),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              if (snapshot.hasError) {
+                return Center(child: Text('Error: ${snapshot.error}'));
+              }
+
+              final allEvents = snapshot.data ?? [];
+
+              if (allEvents.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Center(
+                    child: Text(
+                      'No events yet',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.color
+                                ?.withOpacity(0.7),
+                          ),
+                    ),
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                itemCount: allEvents.length,
+                itemBuilder: (context, index) {
+                  final event = allEvents[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12.0),
+                    child: EventFeedCard(
+                      event: event,
+                      onJoin: () {
+                        // Handle join action
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content:
+                                  Text('You are already joined to this event')),
+                        );
+                      },
+                      onIgnore:
+                          null, // Disable ignore button for profile events
+                      disableIgnore: true, // Gray out the ignore button
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildJoinedEventsSection() {

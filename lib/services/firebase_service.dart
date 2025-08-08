@@ -30,20 +30,23 @@ class FirebaseService {
 
       // Generate a filename with timestamp to avoid cache issues
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'profile_$timestamp.${imageFile.path.split('.').last.toLowerCase()}';
+      final fileName =
+          'profile_$timestamp.${imageFile.path.split('.').last.toLowerCase()}';
 
       // Use the path structure that matches the storage rules: profile_images/{userId}/{fileName}
       final ref = _storage.ref().child('profile_images/${user.uid}/$fileName');
 
       // Log the upload path for debugging
-      Logger.d('FirebaseService', 'Uploading profile image to: profile_images/${user.uid}/$fileName');
+      Logger.d('FirebaseService',
+          'Uploading profile image to: profile_images/${user.uid}/$fileName');
 
       final uploadTask = ref.putFile(imageFile);
       final snapshot = await uploadTask;
       final downloadUrl = await snapshot.ref.getDownloadURL();
 
       // Log the download URL for debugging
-      Logger.d('FirebaseService', 'Profile image uploaded successfully, URL: $downloadUrl');
+      Logger.d('FirebaseService',
+          'Profile image uploaded successfully, URL: $downloadUrl');
 
       return downloadUrl;
     } on FirebaseException catch (e) {
@@ -84,12 +87,14 @@ class FirebaseService {
 
       // Check length
       if (username.length < 2 || username.length > 15) {
-        throw Exception('Invalid username format - must be 2-15 characters and contain only lowercase letters, numbers, and underscores');
+        throw Exception(
+            'Invalid username format - must be 2-15 characters and contain only lowercase letters, numbers, and underscores');
       }
 
       // Check characters
       if (!RegExp(r'^[a-z0-9_]+$').hasMatch(username)) {
-        throw Exception('Invalid username format - must be 2-15 characters and contain only lowercase letters, numbers, and underscores');
+        throw Exception(
+            'Invalid username format - must be 2-15 characters and contain only lowercase letters, numbers, and underscores');
       }
 
       // Check username availability
@@ -100,7 +105,8 @@ class FirebaseService {
 
       // Validate phone number format (Ethiopian)
       // Skip validation for now to allow the data to be saved
-      Logger.d('FirebaseService', 'Phone number being saved to Firebase: $phoneNumber');
+      Logger.d('FirebaseService',
+          'Phone number being saved to Firebase: $phoneNumber');
 
       // We'll just make sure it's not empty
       if (phoneNumber.isEmpty) {
@@ -133,7 +139,8 @@ class FirebaseService {
         // Add business-specific fields
         userData['businessTypes'] = businessTypes;
         userData['establishedDate'] = Timestamp.fromDate(establishedDate);
-        userData['verified'] = false; // Add verified field for business accounts
+        userData['verified'] =
+            false; // Add verified field for business accounts
       } else {
         // Personal account validation
         if (birthday == null) {
@@ -141,7 +148,8 @@ class FirebaseService {
         }
 
         if (interests == null || interests.isEmpty) {
-          throw Exception('At least one interest is required for personal accounts');
+          throw Exception(
+              'At least one interest is required for personal accounts');
         }
 
         // Add personal-specific fields
@@ -192,15 +200,18 @@ class FirebaseService {
   // Get user profile by ID
   Future<Map<String, dynamic>?> getUserProfileById(String userId) async {
     try {
-      Logger.d('FirebaseService', 'FirebaseService: Getting profile for user: $userId');
+      Logger.d('FirebaseService',
+          'FirebaseService: Getting profile for user: $userId');
       final doc = await _firestore.collection('users').doc(userId).get();
 
       if (doc.exists) {
         final data = doc.data();
-        Logger.d('FirebaseService', 'FirebaseService: User profile found: $data');
+        Logger.d(
+            'FirebaseService', 'FirebaseService: User profile found: $data');
         return data;
       } else {
-        Logger.d('FirebaseService', 'FirebaseService: User profile not found for user: $userId');
+        Logger.d('FirebaseService',
+            'FirebaseService: User profile not found for user: $userId');
         return null;
       }
     } catch (e) {
@@ -221,11 +232,29 @@ class FirebaseService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      Logger.d('FirebaseService', 'Profile image updated successfully in Firestore: $imageUrl');
+      Logger.d('FirebaseService',
+          'Profile image updated successfully in Firestore: $imageUrl');
     } on FirebaseException catch (e) {
       throw Exception('Firebase error: ${e.message}');
     } catch (e) {
       throw Exception('Failed to update profile image in Firestore: $e');
+    }
+  }
+
+  // Update a specific field in user document
+  Future<void> updateUserField(
+      String userId, String fieldName, dynamic value) async {
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        fieldName: value,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      Logger.d('FirebaseService', 'Updated field $fieldName for user $userId');
+    } on FirebaseException catch (e) {
+      throw Exception('Firebase error: ${e.message}');
+    } catch (e) {
+      throw Exception('Failed to update user field: $e');
     }
   }
 }

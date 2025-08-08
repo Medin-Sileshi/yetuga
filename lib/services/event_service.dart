@@ -20,7 +20,8 @@ final eventServiceProvider = Provider<EventService>((ref) {
   final retryService = ref.read(retryServiceProvider);
   final pushNotificationService = ref.read(pushNotificationServiceProvider);
   final notificationService = ref.read(notificationServiceProvider);
-  return EventService(eventCacheService, batchService, retryService, pushNotificationService, notificationService);
+  return EventService(eventCacheService, batchService, retryService,
+      pushNotificationService, notificationService);
 });
 
 class EventService {
@@ -98,7 +99,11 @@ class EventService {
       // Add to Firestore and get the document reference
       final docRef = await _eventsCollection.add(eventWithUserId.toMap());
 
-      Logger.d('EventService', 'Event added successfully with ID: ${docRef.id}');
+      // Update user's hosted events array
+      await addEventToUserHosted(docRef.id, _currentUserId);
+
+      Logger.d(
+          'EventService', 'Event added successfully with ID: ${docRef.id}');
       return docRef.id;
     } catch (e) {
       Logger.e('EventService', 'Error adding event', e);
@@ -109,12 +114,14 @@ class EventService {
   // Get all events with pagination
   // SHOW ALL filter: Shows every public post, all events the user posted, all events the user joined, and all events the user was invited to
   // sorted by time posted (new to old) with events happening in 24hrs given priority
-  Stream<List<EventModel>> getEvents({int limit = 10, DocumentSnapshot? startAfter}) {
+  Stream<List<EventModel>> getEvents(
+      {int limit = 10, DocumentSnapshot? startAfter}) {
     Logger.d('EventService', 'Getting all events, user ID: $_currentUserId');
 
     // Require authentication for all event access
     if (_currentUserId.isEmpty) {
-      Logger.d('EventService', 'User not authenticated, returning empty list for SHOW ALL filter');
+      Logger.d('EventService',
+          'User not authenticated, returning empty list for SHOW ALL filter');
       return Stream.value([]);
     }
 
@@ -141,8 +148,11 @@ class EventService {
     // Create a query for events joined by the user but not created by them
     Query joinedQuery = _eventsCollection
         .where('joinedBy', arrayContains: _currentUserId)
-        .where('userId', isNotEqualTo: _currentUserId) // Exclude events created by the user
-        .where('isPrivate', isEqualTo: true) // Only include private events (public ones are already in the main query)
+        .where('userId',
+            isNotEqualTo: _currentUserId) // Exclude events created by the user
+        .where('isPrivate',
+            isEqualTo:
+                true) // Only include private events (public ones are already in the main query)
         .orderBy('userId') // Required when using isNotEqualTo
         .orderBy('createdAt', descending: true);
 
@@ -156,16 +166,16 @@ class EventService {
 
     // Get the public events stream
     final publicEventsStream = query.snapshots().map((snapshot) {
-      final events = snapshot.docs
-          .map((doc) => EventModel.fromFirestore(doc))
-          .toList();
+      final events =
+          snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList();
 
       // Update the cache for each event
       for (final event in events) {
         _eventCacheService.updateEvent(event);
       }
 
-      Logger.d('EventService', 'Found ${events.length} public events for SHOW ALL filter');
+      Logger.d('EventService',
+          'Found ${events.length} public events for SHOW ALL filter');
       return events;
     });
 
@@ -184,31 +194,31 @@ class EventService {
 
     // Get the user events stream
     final userEventsStream = userEventsQuery.snapshots().map((snapshot) {
-      final events = snapshot.docs
-          .map((doc) => EventModel.fromFirestore(doc))
-          .toList();
+      final events =
+          snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList();
 
       // Update the cache for each event
       for (final event in events) {
         _eventCacheService.updateEvent(event);
       }
 
-      Logger.d('EventService', 'Found ${events.length} user events for SHOW ALL filter');
+      Logger.d('EventService',
+          'Found ${events.length} user events for SHOW ALL filter');
       return events;
     });
 
     // Get joined private events stream
     final joinedEventsStream = joinedQuery.snapshots().map((snapshot) {
-      final events = snapshot.docs
-          .map((doc) => EventModel.fromFirestore(doc))
-          .toList();
+      final events =
+          snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList();
 
       // Update the cache for each event
       for (final event in events) {
         _eventCacheService.updateEvent(event);
       }
 
-      Logger.d('EventService', 'Found ${events.length} joined private events for SHOW ALL filter');
+      Logger.d('EventService',
+          'Found ${events.length} joined private events for SHOW ALL filter');
       return events;
     });
 
@@ -217,7 +227,10 @@ class EventService {
 
     if (_currentUserId.isNotEmpty) {
       // Use a more efficient approach with the RSVPService
-      invitedEventsStream = Stream.periodic(const Duration(seconds: 1), (_) => null).take(1).asyncMap((_) async {
+      invitedEventsStream =
+          Stream.periodic(const Duration(seconds: 1), (_) => null)
+              .take(1)
+              .asyncMap((_) async {
         try {
           // Create a new PushNotificationService and RSVPService
           final pushNotificationService = PushNotificationService();
@@ -230,21 +243,26 @@ class EventService {
           final pendingRSVPs = await rsvpService.getPendingRSVPs().first;
 
           // Log all pending RSVPs for debugging
-          Logger.d('EventService', 'SHOW ALL filter - All pending RSVPs: ${pendingRSVPs.length}');
+          Logger.d('EventService',
+              'SHOW ALL filter - All pending RSVPs: ${pendingRSVPs.length}');
           for (final rsvp in pendingRSVPs) {
-            Logger.d('EventService', 'SHOW ALL filter - Pending RSVP: id=${rsvp.id}, eventId=${rsvp.eventId}, status=${rsvp.status}, inviterId=${rsvp.inviterId}, inviteeId=${rsvp.inviteeId}');
+            Logger.d('EventService',
+                'SHOW ALL filter - Pending RSVP: id=${rsvp.id}, eventId=${rsvp.eventId}, status=${rsvp.status}, inviterId=${rsvp.inviterId}, inviteeId=${rsvp.inviteeId}');
           }
 
-          Logger.d('EventService', 'Found ${pendingRSVPs.length} pending RSVPs for SHOW ALL filter');
+          Logger.d('EventService',
+              'Found ${pendingRSVPs.length} pending RSVPs for SHOW ALL filter');
 
           // Create a new NotificationService instead of using the class field
           try {
             final pushNotificationService = PushNotificationService();
-            final notificationService = NotificationService(pushNotificationService);
+            final notificationService =
+                NotificationService(pushNotificationService);
             await notificationService.checkAndSendUnreadNotifications();
             Logger.d('EventService', 'Notifications refreshed successfully');
           } catch (e) {
-            Logger.e('EventService', 'Error refreshing notifications, continuing anyway', e);
+            Logger.e('EventService',
+                'Error refreshing notifications, continuing anyway', e);
           }
 
           final invitedEvents = <EventModel>[];
@@ -255,7 +273,8 @@ class EventService {
               final eventDoc = await _eventsCollection.doc(rsvp.eventId).get();
               if (eventDoc.exists) {
                 // Create the event model and mark it as invited
-                final event = EventModel.fromFirestore(eventDoc).copyWith(isInvited: true);
+                final event = EventModel.fromFirestore(eventDoc)
+                    .copyWith(isInvited: true);
                 invitedEvents.add(event);
 
                 // Update the cache for each event
@@ -264,11 +283,13 @@ class EventService {
                 Logger.d('EventService', 'Marked event ${event.id} as invited');
               }
             } catch (e) {
-              Logger.e('EventService', 'Error getting invited event: ${rsvp.eventId}', e);
+              Logger.e('EventService',
+                  'Error getting invited event: ${rsvp.eventId}', e);
             }
           }
 
-          Logger.d('EventService', 'Found ${invitedEvents.length} invited events for SHOW ALL filter');
+          Logger.d('EventService',
+              'Found ${invitedEvents.length} invited events for SHOW ALL filter');
           return invitedEvents;
         } catch (e) {
           Logger.e('EventService', 'Error getting invited events', e);
@@ -284,39 +305,55 @@ class EventService {
       final publicEvents = await publicEventsStream.first;
       final userEvents = await userEventsStream.first;
       final joinedEvents = await joinedEventsStream.first;
-      final invitedEvents = _currentUserId.isNotEmpty ? await invitedEventsStream.first : [];
+      final invitedEvents =
+          _currentUserId.isNotEmpty ? await invitedEventsStream.first : [];
 
       // Log the number of events from each source
-      Logger.d('EventService', 'SHOW ALL filter - Found ${publicEvents.length} public events');
-      Logger.d('EventService', 'SHOW ALL filter - Found ${userEvents.length} user events');
-      Logger.d('EventService', 'SHOW ALL filter - Found ${joinedEvents.length} joined events');
-      Logger.d('EventService', 'SHOW ALL filter - Found ${invitedEvents.length} invited events');
+      Logger.d('EventService',
+          'SHOW ALL filter - Found ${publicEvents.length} public events');
+      Logger.d('EventService',
+          'SHOW ALL filter - Found ${userEvents.length} user events');
+      Logger.d('EventService',
+          'SHOW ALL filter - Found ${joinedEvents.length} joined events');
+      Logger.d('EventService',
+          'SHOW ALL filter - Found ${invitedEvents.length} invited events');
 
       // Combine all events
-      final allEvents = [...publicEvents, ...userEvents, ...joinedEvents, ...invitedEvents];
+      final allEvents = [
+        ...publicEvents,
+        ...userEvents,
+        ...joinedEvents,
+        ...invitedEvents
+      ];
 
       // Remove duplicates using content-based deduplication
-      Logger.d('EventService', '🔍 STARTING CONTENT-BASED DEDUPLICATION - Found ${allEvents.length} events to process');
+      Logger.d('EventService',
+          '🔍 STARTING CONTENT-BASED DEDUPLICATION - Found ${allEvents.length} events to process');
       final uniqueEvents = <EventModel>[];
       final seenIds = <String>{};
       final seenContentKeys = <String>{};
 
       for (final event in allEvents) {
         // Generate a content key for this event
-        final contentKey = '${event.userId}-${event.inquiry}-${event.date.year}-${event.date.month}-${event.date.day}-${event.time.hour}-${event.time.minute}';
+        final contentKey =
+            '${event.userId}-${event.inquiry}-${event.date.year}-${event.date.month}-${event.date.day}-${event.time.hour}-${event.time.minute}';
 
         // Check if we've already seen this event (by ID or content)
-        if (!seenIds.contains(event.id) && !seenContentKeys.contains(contentKey)) {
+        if (!seenIds.contains(event.id) &&
+            !seenContentKeys.contains(contentKey)) {
           uniqueEvents.add(event);
           seenIds.add(event.id);
           seenContentKeys.add(contentKey);
-          Logger.d('EventService', 'SHOW ALL filter - Added unique event: ${event.id}, content key: $contentKey');
+          Logger.d('EventService',
+              'SHOW ALL filter - Added unique event: ${event.id}, content key: $contentKey');
         } else {
-          Logger.d('EventService', 'SHOW ALL filter - Skipped duplicate event: ${event.id}, content key: $contentKey');
+          Logger.d('EventService',
+              'SHOW ALL filter - Skipped duplicate event: ${event.id}, content key: $contentKey');
         }
       }
 
-      Logger.d('EventService', 'SHOW ALL filter - Combined ${allEvents.length} events, ${uniqueEvents.length} unique');
+      Logger.d('EventService',
+          'SHOW ALL filter - Combined ${allEvents.length} events, ${uniqueEvents.length} unique');
 
       final now = DateTime.now();
 
@@ -335,7 +372,8 @@ class EventService {
         }
       }
 
-      Logger.d('EventService', 'SHOW ALL filter - Separated into ${futureEvents.length} future events and ${pastEvents.length} past events');
+      Logger.d('EventService',
+          'SHOW ALL filter - Separated into ${futureEvents.length} future events and ${pastEvents.length} past events');
 
       // Sort future events by date and time (soonest first)
       futureEvents.sort((a, b) {
@@ -356,13 +394,15 @@ class EventService {
 
       // Limit to requested number
       final limitedEvents = sortedEvents.take(limit).toList();
-      Logger.d('EventService', 'Returning ${limitedEvents.length} events for SHOW ALL filter');
+      Logger.d('EventService',
+          'Returning ${limitedEvents.length} events for SHOW ALL filter');
       return limitedEvents;
     }));
   }
 
   // Get events for the current user with pagination
-  Stream<List<EventModel>> getUserEvents({int limit = 10, DocumentSnapshot? startAfter}) {
+  Stream<List<EventModel>> getUserEvents(
+      {int limit = 10, DocumentSnapshot? startAfter}) {
     if (_currentUserId.isEmpty) {
       return Stream.value([]);
     }
@@ -380,20 +420,20 @@ class EventService {
     query = query.limit(limit);
 
     return query.snapshots().map((snapshot) {
-      return snapshot.docs
-          .map((doc) => EventModel.fromFirestore(doc))
-          .toList();
+      return snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList();
     });
   }
 
   // Get public events (not private) with pagination
   // NEW filter: Shows all new public posts and all events the user posted (given priority based on interest)
-  Stream<List<EventModel>> getPublicEvents({int limit = 10, DocumentSnapshot? startAfter}) {
+  Stream<List<EventModel>> getPublicEvents(
+      {int limit = 10, DocumentSnapshot? startAfter}) {
     Logger.d('EventService', 'Getting public events, user ID: $_currentUserId');
 
     // Require authentication for all event access
     if (_currentUserId.isEmpty) {
-      Logger.d('EventService', 'User not authenticated, returning empty list for NEW filter');
+      Logger.d('EventService',
+          'User not authenticated, returning empty list for NEW filter');
       return Stream.value([]);
     }
 
@@ -405,7 +445,8 @@ class EventService {
         .limit(limit);
 
     // Log the query for debugging
-    Logger.d('EventService', 'NEW filter public query (authenticated): ${publicEventsQuery.toString()}');
+    Logger.d('EventService',
+        'NEW filter public query (authenticated): ${publicEventsQuery.toString()}');
 
     // Second query: Get events created by the current user
     final userEventsQuery = _eventsCollection
@@ -414,7 +455,8 @@ class EventService {
         .limit(limit);
 
     // Log the query for debugging
-    Logger.d('EventService', 'NEW filter user query (authenticated): ${userEventsQuery.toString()}');
+    Logger.d('EventService',
+        'NEW filter user query (authenticated): ${userEventsQuery.toString()}');
 
     // Apply pagination if startAfter is provided
     Query paginatedPublicQuery = publicEventsQuery;
@@ -426,31 +468,31 @@ class EventService {
 
     // Get the public events stream
     final publicEventsStream = paginatedPublicQuery.snapshots().map((snapshot) {
-      final events = snapshot.docs
-          .map((doc) => EventModel.fromFirestore(doc))
-          .toList();
+      final events =
+          snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList();
 
       // Update the cache for each event
       for (final event in events) {
         _eventCacheService.updateEvent(event);
       }
 
-      Logger.d('EventService', 'Found ${events.length} public events for NEW filter');
+      Logger.d('EventService',
+          'Found ${events.length} public events for NEW filter');
       return events;
     });
 
     // Get the user events stream
     final userEventsStream = paginatedUserQuery.snapshots().map((snapshot) {
-      final events = snapshot.docs
-          .map((doc) => EventModel.fromFirestore(doc))
-          .toList();
+      final events =
+          snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList();
 
       // Update the cache for each event
       for (final event in events) {
         _eventCacheService.updateEvent(event);
       }
 
-      Logger.d('EventService', 'Found ${events.length} user events for NEW filter');
+      Logger.d(
+          'EventService', 'Found ${events.length} user events for NEW filter');
       return events;
     });
 
@@ -460,7 +502,9 @@ class EventService {
     Query joinedPrivateQuery = _eventsCollection
         .where('isPrivate', isEqualTo: true)
         .where('joinedBy', arrayContains: _currentUserId)
-        .where('userId', isNotEqualTo: _currentUserId) // Exclude events the user created (already in main query)
+        .where('userId',
+            isNotEqualTo:
+                _currentUserId) // Exclude events the user created (already in main query)
         .orderBy('userId') // Required when using isNotEqualTo
         .orderBy('createdAt', descending: true);
 
@@ -468,10 +512,10 @@ class EventService {
     joinedPrivateQuery = joinedPrivateQuery.limit(limit);
 
     // Get joined private events stream
-    final joinedPrivateEventsStream = joinedPrivateQuery.snapshots().map((snapshot) {
-      final events = snapshot.docs
-          .map((doc) => EventModel.fromFirestore(doc))
-          .toList();
+    final joinedPrivateEventsStream =
+        joinedPrivateQuery.snapshots().map((snapshot) {
+      final events =
+          snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList();
 
       // Update the cache for each event
       for (final event in events) {
@@ -491,7 +535,8 @@ class EventService {
         final rsvpService = RSVPService(pushNotificationService);
 
         // Get all RSVPs for the current user
-        Logger.d('EventService', 'Getting RSVPs for user: $_currentUserId for NEW filter');
+        Logger.d('EventService',
+            'Getting RSVPs for user: $_currentUserId for NEW filter');
 
         // Use getPendingRSVPs instead of filtering after the fact
         final pendingRSVPs = await rsvpService.getPendingRSVPs().first;
@@ -499,17 +544,23 @@ class EventService {
         // Log all pending RSVPs for debugging
         Logger.d('EventService', 'All pending RSVPs: ${pendingRSVPs.length}');
         for (final rsvp in pendingRSVPs) {
-          Logger.d('EventService', 'Pending RSVP: id=${rsvp.id}, eventId=${rsvp.eventId}, status=${rsvp.status}, inviterId=${rsvp.inviterId}, inviteeId=${rsvp.inviteeId}');
+          Logger.d('EventService',
+              'Pending RSVP: id=${rsvp.id}, eventId=${rsvp.eventId}, status=${rsvp.status}, inviterId=${rsvp.inviterId}, inviteeId=${rsvp.inviteeId}');
         }
 
         // Create a new NotificationService instead of using the class field
         try {
           final pushNotificationService = PushNotificationService();
-          final notificationService = NotificationService(pushNotificationService);
+          final notificationService =
+              NotificationService(pushNotificationService);
           await notificationService.checkAndSendUnreadNotifications();
-          Logger.d('EventService', 'Notifications refreshed successfully for NEW filter');
+          Logger.d('EventService',
+              'Notifications refreshed successfully for NEW filter');
         } catch (e) {
-          Logger.e('EventService', 'Error refreshing notifications for NEW filter, continuing anyway', e);
+          Logger.e(
+              'EventService',
+              'Error refreshing notifications for NEW filter, continuing anyway',
+              e);
         }
 
         final invitedEvents = <EventModel>[];
@@ -520,24 +571,29 @@ class EventService {
             final eventDoc = await _eventsCollection.doc(rsvp.eventId).get();
             if (eventDoc.exists) {
               // Create the event model and mark it as invited
-              final event = EventModel.fromFirestore(eventDoc).copyWith(isInvited: true);
+              final event =
+                  EventModel.fromFirestore(eventDoc).copyWith(isInvited: true);
               // Only include events the user hasn't joined yet
               if (!event.joinedBy.contains(_currentUserId)) {
                 invitedEvents.add(event);
                 // Update the cache
                 _eventCacheService.updateEvent(event);
-                Logger.d('EventService', 'Marked event ${event.id} as invited for NEW filter');
+                Logger.d('EventService',
+                    'Marked event ${event.id} as invited for NEW filter');
               }
             }
           } catch (e) {
-            Logger.e('EventService', 'Error getting invited event: ${rsvp.eventId}', e);
+            Logger.e('EventService',
+                'Error getting invited event: ${rsvp.eventId}', e);
           }
         }
 
-        Logger.d('EventService', 'Found ${invitedEvents.length} invited events for NEW filter');
+        Logger.d('EventService',
+            'Found ${invitedEvents.length} invited events for NEW filter');
         return invitedEvents;
       } catch (e) {
-        Logger.e('EventService', 'Error fetching invited events for NEW filter', e);
+        Logger.e(
+            'EventService', 'Error fetching invited events for NEW filter', e);
         return <EventModel>[];
       }
     }));
@@ -559,7 +615,8 @@ class EventService {
         cachedFollowedAccounts = await _getUserFollowedAccounts();
         cachedUserInterests = await _getUserInterests();
         lastCacheTime = now;
-        Logger.d('EventService', 'Updated cache for NEW filter - followed accounts: ${cachedFollowedAccounts!.length}, interests: ${cachedUserInterests!.length}');
+        Logger.d('EventService',
+            'Updated cache for NEW filter - followed accounts: ${cachedFollowedAccounts!.length}, interests: ${cachedUserInterests!.length}');
       }
     }
 
@@ -576,39 +633,54 @@ class EventService {
       final invitedEvents = await combinedInvitedEventsStream.first;
 
       // Log the number of events from each source
-      Logger.d('EventService', 'NEW filter - Found ${publicEvents.length} public events');
-      Logger.d('EventService', 'NEW filter - Found ${userEvents.length} user events');
-      Logger.d('EventService', 'NEW filter - Found ${joinedPrivateEvents.length} joined private events');
-      Logger.d('EventService', 'NEW filter - Found ${invitedEvents.length} invited events');
+      Logger.d('EventService',
+          'NEW filter - Found ${publicEvents.length} public events');
+      Logger.d('EventService',
+          'NEW filter - Found ${userEvents.length} user events');
+      Logger.d('EventService',
+          'NEW filter - Found ${joinedPrivateEvents.length} joined private events');
+      Logger.d('EventService',
+          'NEW filter - Found ${invitedEvents.length} invited events');
 
       // Combine all events
-      final allEvents = [...publicEvents, ...userEvents, ...joinedPrivateEvents, ...invitedEvents];
+      final allEvents = [
+        ...publicEvents,
+        ...userEvents,
+        ...joinedPrivateEvents,
+        ...invitedEvents
+      ];
 
       // Sort by createdAt (newest to oldest)
       allEvents.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
       // Remove duplicates using content-based deduplication
-      Logger.d('EventService', '🔍 STARTING CONTENT-BASED DEDUPLICATION (NEW FILTER) - Found ${allEvents.length} events to process');
+      Logger.d('EventService',
+          '🔍 STARTING CONTENT-BASED DEDUPLICATION (NEW FILTER) - Found ${allEvents.length} events to process');
       final uniqueEvents = <EventModel>[];
       final seenIds = <String>{};
       final seenContentKeys = <String>{};
 
       for (final event in allEvents) {
         // Generate a content key for this event
-        final contentKey = '${event.userId}-${event.inquiry}-${event.date.year}-${event.date.month}-${event.date.day}-${event.time.hour}-${event.time.minute}';
+        final contentKey =
+            '${event.userId}-${event.inquiry}-${event.date.year}-${event.date.month}-${event.date.day}-${event.time.hour}-${event.time.minute}';
 
         // Check if we've already seen this event (by ID or content)
-        if (!seenIds.contains(event.id) && !seenContentKeys.contains(contentKey)) {
+        if (!seenIds.contains(event.id) &&
+            !seenContentKeys.contains(contentKey)) {
           uniqueEvents.add(event);
           seenIds.add(event.id);
           seenContentKeys.add(contentKey);
-          Logger.d('EventService', 'NEW filter - Added unique event: ${event.id}, content key: $contentKey');
+          Logger.d('EventService',
+              'NEW filter - Added unique event: ${event.id}, content key: $contentKey');
         } else {
-          Logger.d('EventService', 'NEW filter - Skipped duplicate event: ${event.id}, content key: $contentKey');
+          Logger.d('EventService',
+              'NEW filter - Skipped duplicate event: ${event.id}, content key: $contentKey');
         }
       }
 
-      Logger.d('EventService', 'NEW filter - Combined ${allEvents.length} events, ${uniqueEvents.length} unique');
+      Logger.d('EventService',
+          'NEW filter - Combined ${allEvents.length} events, ${uniqueEvents.length} unique');
 
       // Use the cached data for prioritization
       final followedAccounts = cachedFollowedAccounts ?? [];
@@ -635,14 +707,20 @@ class EventService {
         }
       }
 
-      Logger.d('EventService', 'NEW filter - Prioritized: ${followedAccountEvents.length} followed, ${interestEvents.length} interests, ${otherEvents.length} other');
+      Logger.d('EventService',
+          'NEW filter - Prioritized: ${followedAccountEvents.length} followed, ${interestEvents.length} interests, ${otherEvents.length} other');
 
       // Combine the lists in priority order
-      final sortedEvents = [...followedAccountEvents, ...interestEvents, ...otherEvents];
+      final sortedEvents = [
+        ...followedAccountEvents,
+        ...interestEvents,
+        ...otherEvents
+      ];
 
       // Limit to requested number
       final limitedEvents = sortedEvents.take(limit).toList();
-      Logger.d('EventService', 'Returning ${limitedEvents.length} events for NEW filter');
+      Logger.d('EventService',
+          'Returning ${limitedEvents.length} events for NEW filter');
       return limitedEvents;
     }));
   }
@@ -697,7 +775,8 @@ class EventService {
       if (success) {
         // Update the cache with the new event data
         _eventCacheService.updateEvent(event);
-        Logger.d('EventService', 'Event updated successfully and cache updated');
+        Logger.d(
+            'EventService', 'Event updated successfully and cache updated');
       } else {
         Logger.e('EventService', 'Failed to update event after retries');
         throw Exception('Failed to update event after retries');
@@ -785,8 +864,10 @@ class EventService {
       }
 
       // Check if the event has reached its attendee limit
-      if (event.attendeeLimit != null && event.joinedBy.length >= event.attendeeLimit!) {
-        Logger.e('EventService', 'Event has reached its attendee limit: $eventId');
+      if (event.attendeeLimit != null &&
+          event.joinedBy.length >= event.attendeeLimit!) {
+        Logger.e(
+            'EventService', 'Event has reached its attendee limit: $eventId');
         throw Exception('This event has reached its attendee limit');
       }
 
@@ -805,7 +886,8 @@ class EventService {
       event.joinedBy.add(userId);
       _eventCacheService.updateEvent(event);
 
-      Logger.d('EventService', 'Successfully added attendee $userId to event: $eventId');
+      Logger.d('EventService',
+          'Successfully added attendee $userId to event: $eventId');
     } catch (e) {
       Logger.e('EventService', 'Error adding attendee to event', e);
       rethrow;
@@ -852,10 +934,15 @@ class EventService {
 
         // Update the cached event
         event.joinedBy.remove(_currentUserId);
+
+        // Update user event arrays
+        await updateUserEventArrays(eventId, _currentUserId, false);
       } else {
         // Check if the event has reached its attendee limit
-        if (event.attendeeLimit != null && event.joinedBy.length >= event.attendeeLimit!) {
-          Logger.e('EventService', 'Event has reached its attendee limit: $eventId');
+        if (event.attendeeLimit != null &&
+            event.joinedBy.length >= event.attendeeLimit!) {
+          Logger.e(
+              'EventService', 'Event has reached its attendee limit: $eventId');
           throw Exception('This event has reached its attendee limit');
         }
 
@@ -867,6 +954,9 @@ class EventService {
 
         // Update the cached event
         event.joinedBy.add(_currentUserId);
+
+        // Update user event arrays
+        await updateUserEventArrays(eventId, _currentUserId, true);
       }
 
       // Update the cache
@@ -895,7 +985,8 @@ class EventService {
   // Toggle likes for multiple events in a batch
   Future<void> toggleLikesInBatch(Map<String, bool> eventLikes) async {
     try {
-      Logger.d('EventService', 'Toggling likes for ${eventLikes.length} events in batch');
+      Logger.d('EventService',
+          'Toggling likes for ${eventLikes.length} events in batch');
 
       if (_currentUserId.isEmpty) {
         Logger.e('EventService', 'User not authenticated');
@@ -933,9 +1024,11 @@ class EventService {
   }
 
   // Create invitations for multiple users in a batch
-  Future<void> createInvitationsInBatch(String eventId, List<String> inviteeIds) async {
+  Future<void> createInvitationsInBatch(
+      String eventId, List<String> inviteeIds) async {
     try {
-      Logger.d('EventService', 'Creating invitations for ${inviteeIds.length} users in batch');
+      Logger.d('EventService',
+          'Creating invitations for ${inviteeIds.length} users in batch');
 
       if (_currentUserId.isEmpty) {
         Logger.e('EventService', 'User not authenticated');
@@ -943,7 +1036,8 @@ class EventService {
       }
 
       // Use the batch service to perform the operation
-      await _batchService.createInvitationsInBatch(eventId, inviteeIds, _currentUserId);
+      await _batchService.createInvitationsInBatch(
+          eventId, inviteeIds, _currentUserId);
 
       // Check if the event is private
       final eventDoc = await _eventsCollection.doc(eventId).get();
@@ -952,19 +1046,22 @@ class EventService {
         final isPrivate = eventData['isPrivate'] as bool? ?? false;
 
         if (isPrivate) {
-          Logger.d('EventService', 'Event is private, verifying invitees are in joinedBy array');
+          Logger.d('EventService',
+              'Event is private, verifying invitees are in joinedBy array');
 
           // Verify that all invitees are in the joinedBy array
           final joinedBy = List<String>.from(eventData['joinedBy'] ?? []);
-          final missingInvitees = inviteeIds.where((id) => !joinedBy.contains(id)).toList();
+          final missingInvitees =
+              inviteeIds.where((id) => !joinedBy.contains(id)).toList();
 
           if (missingInvitees.isNotEmpty) {
-            Logger.d('EventService', 'Adding ${missingInvitees.length} missing invitees to joinedBy array');
+            Logger.d('EventService',
+                'Adding ${missingInvitees.length} missing invitees to joinedBy array');
 
             // Add any missing invitees to the joinedBy array
-            await _eventsCollection.doc(eventId).update({
-              'joinedBy': FieldValue.arrayUnion(missingInvitees)
-            });
+            await _eventsCollection
+                .doc(eventId)
+                .update({'joinedBy': FieldValue.arrayUnion(missingInvitees)});
           }
         }
       }
@@ -1047,15 +1144,18 @@ class EventService {
 
       // If not authenticated, return empty list
       if (_currentUserId.isEmpty) {
-        Logger.d('EventService', 'User not authenticated, returning empty interests list');
+        Logger.d('EventService',
+            'User not authenticated, returning empty interests list');
         return [];
       }
 
       // Get the user's onboarding data from Firestore
-      final userDoc = await _firestore.collection('users').doc(_currentUserId).get();
+      final userDoc =
+          await _firestore.collection('users').doc(_currentUserId).get();
 
       if (!userDoc.exists) {
-        Logger.d('EventService', 'User document not found, returning empty interests list');
+        Logger.d('EventService',
+            'User document not found, returning empty interests list');
         return [];
       }
 
@@ -1085,12 +1185,14 @@ class EventService {
 
       // If not authenticated, return empty list
       if (_currentUserId.isEmpty) {
-        Logger.d('EventService', 'User not authenticated, returning empty followed accounts list');
+        Logger.d('EventService',
+            'User not authenticated, returning empty followed accounts list');
         return [];
       }
 
       // Get the user's following collection
-      final followingSnapshot = await _retryService.executeWithRetry<QuerySnapshot>(
+      final followingSnapshot =
+          await _retryService.executeWithRetry<QuerySnapshot>(
         operation: () => _firestore
             .collection('users')
             .doc(_currentUserId)
@@ -1102,18 +1204,22 @@ class EventService {
       );
 
       // Extract user IDs from the following collection
-      final followedUserIds = followingSnapshot.docs.map((doc) => doc.id).toList();
+      final followedUserIds =
+          followingSnapshot.docs.map((doc) => doc.id).toList();
 
       // Limit the number of followed accounts to process (for performance)
       const maxFollowedAccounts = 100;
-      final limitedFollowedUserIds = followedUserIds.length > maxFollowedAccounts
-          ? followedUserIds.sublist(0, maxFollowedAccounts)
-          : followedUserIds;
+      final limitedFollowedUserIds =
+          followedUserIds.length > maxFollowedAccounts
+              ? followedUserIds.sublist(0, maxFollowedAccounts)
+              : followedUserIds;
 
-      Logger.d('EventService', 'Found ${limitedFollowedUserIds.length} followed accounts (limited from ${followedUserIds.length})');
+      Logger.d('EventService',
+          'Found ${limitedFollowedUserIds.length} followed accounts (limited from ${followedUserIds.length})');
       return limitedFollowedUserIds;
     } on FirebaseException catch (e) {
-      Logger.e('EventService', 'Firebase error getting followed accounts: ${e.code}', e);
+      Logger.e('EventService',
+          'Firebase error getting followed accounts: ${e.code}', e);
       return []; // Return empty list on error
     } catch (e) {
       Logger.e('EventService', 'Error getting followed accounts', e);
@@ -1130,9 +1236,8 @@ class EventService {
       _eventCacheService.clearCache();
 
       // Prefetch some recent events to populate the cache
-      final query = _eventsCollection
-          .orderBy('createdAt', descending: true)
-          .limit(20);
+      final query =
+          _eventsCollection.orderBy('createdAt', descending: true).limit(20);
 
       final querySnapshot = await _retryService.executeWithRetry<QuerySnapshot>(
         operation: () => query.get(),
@@ -1152,7 +1257,8 @@ class EventService {
       cachedUserInterests = null;
       lastCacheTime = null;
 
-      Logger.d('EventService', 'Event cache refreshed with ${querySnapshot.docs.length} events');
+      Logger.d('EventService',
+          'Event cache refreshed with ${querySnapshot.docs.length} events');
     } catch (e) {
       Logger.e('EventService', 'Error refreshing event cache', e);
       rethrow;
@@ -1169,12 +1275,12 @@ class EventService {
 
       // Force a Firestore refresh by making a small query
       // This helps ensure the streams get fresh data
-      final query = _eventsCollection
-          .orderBy('createdAt', descending: true)
-          .limit(10);
+      final query =
+          _eventsCollection.orderBy('createdAt', descending: true).limit(10);
 
       final snapshot = await query.get();
-      Logger.d('EventService', 'Forced Firestore refresh, found ${snapshot.docs.length} events');
+      Logger.d('EventService',
+          'Forced Firestore refresh, found ${snapshot.docs.length} events');
 
       // Update the cache with the fetched events
       for (final doc in snapshot.docs) {
@@ -1200,7 +1306,8 @@ class EventService {
   // Check if there are any events in the database
   Future<bool> hasEvents() async {
     try {
-      Logger.d('EventService', 'Checking if there are any events in the database');
+      Logger.d(
+          'EventService', 'Checking if there are any events in the database');
 
       final query = _eventsCollection.limit(1);
       final snapshot = await query.get();
@@ -1218,12 +1325,15 @@ class EventService {
   // Get events that the current user has joined or created
   // JOINED filter: Shows all events the user has been accepted to and all events the user has created
   // If there are no joined events, it will display "You haven't joined any events yet"
-  Stream<List<EventModel>> getJoinedEvents({int limit = 10, DocumentSnapshot? startAfter}) {
-    Logger.d('EventService', 'Getting joined events, user ID: $_currentUserId, pagination: ${startAfter != null}');
+  Stream<List<EventModel>> getJoinedEvents(
+      {int limit = 10, DocumentSnapshot? startAfter}) {
+    Logger.d('EventService',
+        'Getting joined events, user ID: $_currentUserId, pagination: ${startAfter != null}');
 
     // For the JOINED filter, we need authentication
     if (_currentUserId.isEmpty) {
-      Logger.d('EventService', 'User not authenticated, returning empty list for JOINED filter');
+      Logger.d('EventService',
+          'User not authenticated, returning empty list for JOINED filter');
       return Stream.value([]);
     }
 
@@ -1237,7 +1347,8 @@ class EventService {
     // This includes events where the user is in the joinedBy array
     Query joinedQuery = _eventsCollection
         .where('joinedBy', arrayContains: _currentUserId)
-        .where('userId', isNotEqualTo: _currentUserId) // Exclude events created by the user
+        .where('userId',
+            isNotEqualTo: _currentUserId) // Exclude events created by the user
         .orderBy('userId') // Required when using isNotEqualTo
         .orderBy('createdAt', descending: true);
 
@@ -1254,9 +1365,8 @@ class EventService {
 
     // Get events created by the user
     final createdEventsStream = createdQuery.snapshots().map((snapshot) {
-      final events = snapshot.docs
-          .map((doc) => EventModel.fromFirestore(doc))
-          .toList();
+      final events =
+          snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList();
 
       // Update the cache for each event
       for (final event in events) {
@@ -1269,9 +1379,8 @@ class EventService {
 
     // Get events joined by the user
     final joinedEventsStream = joinedQuery.snapshots().map((snapshot) {
-      final events = snapshot.docs
-          .map((doc) => EventModel.fromFirestore(doc))
-          .toList();
+      final events =
+          snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList();
 
       // Update the cache for each event
       for (final event in events) {
@@ -1285,36 +1394,451 @@ class EventService {
     // Combine both streams
     return StreamGroup.merge([createdEventsStream, joinedEventsStream])
         .map((events) {
-          // Sort by createdAt
-          events.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      // Sort by createdAt
+      events.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-          // Remove duplicates using content-based deduplication
-          Logger.d('EventService', '🔍 STARTING CONTENT-BASED DEDUPLICATION (JOINED FILTER) - Found ${events.length} events to process');
-          final uniqueEvents = <EventModel>[];
-          final seenIds = <String>{};
-          final seenContentKeys = <String>{};
+      // Remove duplicates using content-based deduplication
+      Logger.d('EventService',
+          '🔍 STARTING CONTENT-BASED DEDUPLICATION (JOINED FILTER) - Found ${events.length} events to process');
+      final uniqueEvents = <EventModel>[];
+      final seenIds = <String>{};
+      final seenContentKeys = <String>{};
 
-          for (final event in events) {
-            // Generate a content key for this event
-            final contentKey = '${event.userId}-${event.inquiry}-${event.date.year}-${event.date.month}-${event.date.day}-${event.time.hour}-${event.time.minute}';
+      for (final event in events) {
+        // Generate a content key for this event
+        final contentKey =
+            '${event.userId}-${event.inquiry}-${event.date.year}-${event.date.month}-${event.date.day}-${event.time.hour}-${event.time.minute}';
 
-            // Check if we've already seen this event (by ID or content)
-            if (!seenIds.contains(event.id) && !seenContentKeys.contains(contentKey)) {
-              uniqueEvents.add(event);
-              seenIds.add(event.id);
-              seenContentKeys.add(contentKey);
-              Logger.d('EventService', 'JOINED filter - Added unique event: ${event.id}, content key: $contentKey');
-            } else {
-              Logger.d('EventService', 'JOINED filter - Skipped duplicate event: ${event.id}, content key: $contentKey');
+        // Check if we've already seen this event (by ID or content)
+        if (!seenIds.contains(event.id) &&
+            !seenContentKeys.contains(contentKey)) {
+          uniqueEvents.add(event);
+          seenIds.add(event.id);
+          seenContentKeys.add(contentKey);
+          Logger.d('EventService',
+              'JOINED filter - Added unique event: ${event.id}, content key: $contentKey');
+        } else {
+          Logger.d('EventService',
+              'JOINED filter - Skipped duplicate event: ${event.id}, content key: $contentKey');
+        }
+      }
+      // Limit to requested number
+      final limitedEvents = uniqueEvents.take(limit).toList();
+      Logger.d('EventService',
+          'Returning ${limitedEvents.length} joined/created events');
+      return limitedEvents;
+      // Note: The UI will handle showing "You haven't joined any events yet" when the list is empty
+      // This is typically done in the widget that displays the events, not in the service
+    });
+  }
+
+  // NEW: Get events hosted by a specific user
+  Stream<List<EventModel>> getHostedEvents(String userId,
+      {int limit = 10, DocumentSnapshot? startAfter}) {
+    Logger.d('EventService', 'Getting hosted events for user: $userId');
+
+    if (userId.isEmpty) {
+      return Stream.value([]);
+    }
+
+    Query query = _eventsCollection
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true);
+
+    // Apply pagination if startAfter is provided
+    if (startAfter != null) {
+      query = query.startAfterDocument(startAfter);
+    }
+
+    // Apply limit
+    query = query.limit(limit);
+
+    return query.snapshots().map((snapshot) {
+      final events =
+          snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList();
+
+      // Update the cache for each event
+      for (final event in events) {
+        _eventCacheService.updateEvent(event);
+      }
+
+      Logger.d('EventService',
+          'Found ${events.length} hosted events for user: $userId');
+      return events;
+    });
+  }
+
+  // NEW: Get all events for a specific user (hosted + joined)
+  Stream<List<EventModel>> getAllUserEvents(String userId,
+      {int limit = 20, DocumentSnapshot? startAfter}) {
+    Logger.d('EventService', 'Getting all events for user: $userId');
+
+    if (userId.isEmpty) {
+      return Stream.value([]);
+    }
+
+    // Create two separate queries and merge the results
+    // 1. Events created by the user
+    Query hostedQuery = _eventsCollection
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true);
+
+    // 2. Events joined by the user (but not created by them)
+    Query joinedQuery = _eventsCollection
+        .where('joinedBy', arrayContains: userId)
+        .where('userId',
+            isNotEqualTo: userId) // Exclude events created by the user
+        .orderBy('userId') // Required when using isNotEqualTo
+        .orderBy('createdAt', descending: true);
+
+    // Apply pagination if startAfter is provided
+    if (startAfter != null) {
+      hostedQuery = hostedQuery.startAfterDocument(startAfter);
+      joinedQuery = joinedQuery.startAfterDocument(startAfter);
+    }
+
+    // Apply limit to both queries
+    hostedQuery = hostedQuery.limit(limit);
+    joinedQuery = joinedQuery.limit(limit);
+
+    // Get hosted events
+    final hostedEventsStream = hostedQuery.snapshots().map((snapshot) {
+      final events =
+          snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList();
+
+      for (final event in events) {
+        _eventCacheService.updateEvent(event);
+      }
+
+      Logger.d('EventService',
+          'Found ${events.length} hosted events for user: $userId');
+      return events;
+    });
+
+    // Get joined events
+    final joinedEventsStream = joinedQuery.snapshots().map((snapshot) {
+      final events =
+          snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList();
+
+      for (final event in events) {
+        _eventCacheService.updateEvent(event);
+      }
+
+      Logger.d('EventService',
+          'Found ${events.length} joined events for user: $userId');
+      return events;
+    });
+
+    // Combine both streams
+    return StreamGroup.merge([hostedEventsStream, joinedEventsStream])
+        .map((events) {
+      // Sort by createdAt
+      events.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      // Remove duplicates using content-based deduplication
+      Logger.d('EventService',
+          '🔍 STARTING CONTENT-BASED DEDUPLICATION (ALL USER EVENTS) - Found ${events.length} events to process');
+      final uniqueEvents = <EventModel>[];
+      final seenIds = <String>{};
+      final seenContentKeys = <String>{};
+
+      for (final event in events) {
+        // Generate a content key for this event
+        final contentKey =
+            '${event.userId}-${event.inquiry}-${event.date.year}-${event.date.month}-${event.date.day}-${event.time.hour}-${event.time.minute}';
+
+        // Check if we've already seen this event (by ID or content)
+        if (!seenIds.contains(event.id) &&
+            !seenContentKeys.contains(contentKey)) {
+          uniqueEvents.add(event);
+          seenIds.add(event.id);
+          seenContentKeys.add(contentKey);
+          Logger.d('EventService',
+              'ALL USER EVENTS - Added unique event: ${event.id}, content key: $contentKey');
+        } else {
+          Logger.d('EventService',
+              'ALL USER EVENTS - Skipped duplicate event: ${event.id}, content key: $contentKey');
+        }
+      }
+
+      // Limit to requested number
+      final limitedEvents = uniqueEvents.take(limit).toList();
+      Logger.d('EventService',
+          'Returning ${limitedEvents.length} total events for user: $userId');
+      return limitedEvents;
+    });
+  }
+
+  // NEW: Get user events using arrays from user document (more reliable)
+  Stream<List<EventModel>> getUserEventsFromArrays(String userId,
+      {int limit = 20}) {
+    Logger.d(
+        'EventService', 'Getting user events from arrays for user: $userId');
+
+    if (userId.isEmpty) {
+      return Stream.value([]);
+    }
+
+    return Stream.fromFuture(Future(() async {
+      try {
+        // Get user document to access eventsHosted and eventsJoined arrays
+        final userDoc = await _firestore.collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+          Logger.d('EventService', 'User document not found for: $userId');
+          return <EventModel>[];
+        }
+
+        final userData = userDoc.data() as Map<String, dynamic>;
+        final hostedEventIds =
+            List<String>.from(userData['eventsHosted'] ?? []);
+        final joinedEventIds =
+            List<String>.from(userData['eventsJoined'] ?? []);
+
+        Logger.d('EventService',
+            'Found ${hostedEventIds.length} hosted event IDs and ${joinedEventIds.length} joined event IDs for user: $userId');
+
+        // Combine all event IDs and remove duplicates
+        final allEventIds = <String>{};
+        allEventIds.addAll(hostedEventIds);
+        allEventIds.addAll(joinedEventIds);
+
+        Logger.d(
+            'EventService', 'Total unique event IDs: ${allEventIds.length}');
+
+        if (allEventIds.isEmpty) {
+          return <EventModel>[];
+        }
+
+        // Fetch all events in parallel
+        final eventFutures = allEventIds.map((eventId) async {
+          try {
+            final eventDoc = await _eventsCollection.doc(eventId).get();
+            if (eventDoc.exists) {
+              final event = EventModel.fromFirestore(eventDoc);
+              _eventCacheService.updateEvent(event);
+              return event;
             }
+            return null;
+          } catch (e) {
+            Logger.e('EventService', 'Error fetching event $eventId', e);
+            return null;
           }
-          // Limit to requested number
-          final limitedEvents = uniqueEvents.take(limit).toList();
-          Logger.d('EventService', 'Returning ${limitedEvents.length} joined/created events');
-          return limitedEvents;
-          // Note: The UI will handle showing "You haven't joined any events yet" when the list is empty
-          // This is typically done in the widget that displays the events, not in the service
         });
+
+        final events = await Future.wait(eventFutures);
+        final validEvents =
+            events.where((event) => event != null).cast<EventModel>().toList();
+
+        // Sort by createdAt (newest first)
+        validEvents.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        // Apply limit
+        final limitedEvents = validEvents.take(limit).toList();
+
+        Logger.d('EventService',
+            'Returning ${limitedEvents.length} events for user: $userId');
+        return limitedEvents;
+      } catch (e) {
+        Logger.e('EventService', 'Error getting user events from arrays', e);
+        return <EventModel>[];
+      }
+    }));
+  }
+
+  // NEW: Enhanced private event filtering
+  List<EventModel> filterPrivateEvents(
+      List<EventModel> events, String currentUserId) {
+    return events.where((event) {
+      // Public events are always visible
+      if (!event.isPrivate) {
+        return true;
+      }
+
+      // Private events are only visible to:
+      // 1. The event creator
+      // 2. Users who have joined the event
+      return event.userId == currentUserId ||
+          event.joinedBy.contains(currentUserId);
+    }).toList();
+  }
+
+  // NEW: Update user event arrays when joining/leaving events
+  Future<void> updateUserEventArrays(
+      String eventId, String userId, bool isJoining) async {
+    try {
+      Logger.d('EventService',
+          'Updating user event arrays: eventId=$eventId, userId=$userId, isJoining=$isJoining');
+
+      final userDocRef = _firestore.collection('users').doc(userId);
+
+      if (isJoining) {
+        // Add event to user's joined events array
+        await userDocRef.update({
+          'eventsJoined': FieldValue.arrayUnion([eventId])
+        });
+        Logger.d('EventService',
+            'Added event $eventId to user $userId joined events');
+      } else {
+        // Remove event from user's joined events array
+        await userDocRef.update({
+          'eventsJoined': FieldValue.arrayRemove([eventId])
+        });
+        Logger.d('EventService',
+            'Removed event $eventId from user $userId joined events');
+      }
+    } catch (e) {
+      Logger.e('EventService', 'Error updating user event arrays', e);
+      // Don't rethrow - this is a background operation
+    }
+  }
+
+  // NEW: Add event to user's hosted events array
+  Future<void> addEventToUserHosted(String eventId, String userId) async {
+    try {
+      Logger.d('EventService',
+          'Adding event $eventId to user $userId hosted events');
+
+      final userDocRef = _firestore.collection('users').doc(userId);
+      await userDocRef.update({
+        'eventsHosted': FieldValue.arrayUnion([eventId])
+      });
+
+      Logger.d(
+          'EventService', 'Added event $eventId to user $userId hosted events');
+    } catch (e) {
+      Logger.e('EventService', 'Error adding event to user hosted events', e);
+      // Don't rethrow - this is a background operation
+    }
+  }
+
+  // NEW: Enhanced toggle join with user arrays
+  Future<bool> toggleJoinWithUserArrays(String eventId) async {
+    try {
+      Logger.d(
+          'EventService', 'Toggling join with user arrays for event: $eventId');
+
+      // Ensure we have a user ID
+      if (_currentUserId.isEmpty) {
+        Logger.e('EventService', 'User not authenticated');
+        throw Exception('User not authenticated');
+      }
+
+      // Get the current event data from cache if available
+      EventModel? event = await _eventCacheService.getEvent(eventId);
+
+      // If not in cache, get from Firestore
+      if (event == null) {
+        final docRef = _eventsCollection.doc(eventId);
+        final docSnapshot = await docRef.get();
+        if (!docSnapshot.exists) {
+          Logger.e('EventService', 'Event not found: $eventId');
+          throw Exception('Event not found');
+        }
+
+        event = EventModel.fromFirestore(docSnapshot);
+      }
+
+      // Check if user already joined this event
+      final hasJoined = event.joinedBy.contains(_currentUserId);
+
+      // Update the event in Firestore using array operations
+      final docRef = _eventsCollection.doc(eventId);
+      if (hasJoined) {
+        // Remove join using arrayRemove
+        await docRef.update({
+          'joinedBy': FieldValue.arrayRemove([_currentUserId])
+        });
+        Logger.d('EventService', 'Removing join from event: $eventId');
+
+        // Update the cached event
+        event.joinedBy.remove(_currentUserId);
+
+        // Update user event arrays
+        await updateUserEventArrays(eventId, _currentUserId, false);
+      } else {
+        // Check if the event has reached its attendee limit
+        if (event.attendeeLimit != null &&
+            event.joinedBy.length >= event.attendeeLimit!) {
+          Logger.e(
+              'EventService', 'Event has reached its attendee limit: $eventId');
+          throw Exception('This event has reached its attendee limit');
+        }
+
+        // Add join using arrayUnion
+        await docRef.update({
+          'joinedBy': FieldValue.arrayUnion([_currentUserId])
+        });
+        Logger.d('EventService', 'Adding join to event: $eventId');
+
+        // Update the cached event
+        event.joinedBy.add(_currentUserId);
+
+        // Update user event arrays
+        await updateUserEventArrays(eventId, _currentUserId, true);
+      }
+
+      // Update the cache
+      _eventCacheService.updateEvent(event);
+
+      // Return the new join state
+      return !hasJoined;
+    } catch (e) {
+      Logger.e('EventService', 'Error toggling join with user arrays', e);
+      rethrow;
+    }
+  }
+
+  // NEW: Get user event statistics
+  Future<Map<String, int>> getUserEventStats(String userId) async {
+    try {
+      Logger.d('EventService', 'Getting event stats for user: $userId');
+
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (!userDoc.exists) {
+        return {'hosted': 0, 'joined': 0};
+      }
+
+      final userData = userDoc.data() as Map<String, dynamic>;
+      final hostedEvents = List<String>.from(userData['eventsHosted'] ?? []);
+      final joinedEvents = List<String>.from(userData['eventsJoined'] ?? []);
+
+      return {
+        'hosted': hostedEvents.length,
+        'joined': joinedEvents.length,
+      };
+    } catch (e) {
+      Logger.e('EventService', 'Error getting user event stats', e);
+      return {'hosted': 0, 'joined': 0};
+    }
+  }
+
+  // NEW: Enhanced add event with user arrays
+  Future<String> addEventWithUserArrays(EventModel event) async {
+    try {
+      Logger.d('EventService', 'Adding new event with user arrays...');
+
+      // Ensure we have a user ID
+      if (_currentUserId.isEmpty) {
+        Logger.e('EventService', 'User not authenticated');
+        throw Exception('User not authenticated');
+      }
+
+      // Add the event with the current user's ID
+      final eventWithUserId = event.copyWith(userId: _currentUserId);
+
+      // Add to Firestore and get the document reference
+      final docRef = await _eventsCollection.add(eventWithUserId.toMap());
+      final eventId = docRef.id;
+
+      // Update user's hosted events array
+      await addEventToUserHosted(eventId, _currentUserId);
+
+      Logger.d('EventService', 'Event added successfully with ID: $eventId');
+      return eventId;
+    } catch (e) {
+      Logger.e('EventService', 'Error adding event with user arrays', e);
+      rethrow;
+    }
   }
 
   // Get user display name from user ID
@@ -1349,7 +1873,8 @@ class EventService {
     String? activityType,
   }) async {
     try {
-      Logger.d('EventService', 'Searching events with query: "$query", activityType: $activityType');
+      Logger.d('EventService',
+          'Searching events with query: "$query", activityType: $activityType');
 
       // Start with a base query
       Query baseQuery = _eventsCollection;
@@ -1378,8 +1903,10 @@ class EventService {
       final normalizedQuery = query.toLowerCase().trim();
       final filteredEvents = allEvents.where((event) {
         // Check if the event matches the search query
-        final matchesInquiry = event.inquiry.toLowerCase().contains(normalizedQuery);
-        final matchesActivityType = event.activityType.toLowerCase().contains(normalizedQuery);
+        final matchesInquiry =
+            event.inquiry.toLowerCase().contains(normalizedQuery);
+        final matchesActivityType =
+            event.activityType.toLowerCase().contains(normalizedQuery);
 
         // Check privacy settings
         final isPublic = !event.isPrivate;
@@ -1390,24 +1917,26 @@ class EventService {
         // 1. It matches the search query (in inquiry or activity type)
         // 2. It's either public, created by the user, or the user has joined it
         return (matchesInquiry || matchesActivityType) &&
-               (isPublic || isCreatedByUser || isJoinedByUser);
+            (isPublic || isCreatedByUser || isJoinedByUser);
       }).toList();
 
       // Sort results by relevance and recency
       filteredEvents.sort((a, b) {
         // First, prioritize exact matches
         final aExactMatch = a.inquiry.toLowerCase() == normalizedQuery ||
-                           a.activityType.toLowerCase() == normalizedQuery;
+            a.activityType.toLowerCase() == normalizedQuery;
         final bExactMatch = b.inquiry.toLowerCase() == normalizedQuery ||
-                           b.activityType.toLowerCase() == normalizedQuery;
+            b.activityType.toLowerCase() == normalizedQuery;
 
         if (aExactMatch && !bExactMatch) return -1;
         if (!aExactMatch && bExactMatch) return 1;
 
         // Then, prioritize events happening soon
         final now = DateTime.now();
-        final aIsUpcoming = a.date.isAfter(now) && a.date.isBefore(now.add(const Duration(days: 7)));
-        final bIsUpcoming = b.date.isAfter(now) && b.date.isBefore(now.add(const Duration(days: 7)));
+        final aIsUpcoming = a.date.isAfter(now) &&
+            a.date.isBefore(now.add(const Duration(days: 7)));
+        final bIsUpcoming = b.date.isAfter(now) &&
+            b.date.isBefore(now.add(const Duration(days: 7)));
 
         if (aIsUpcoming && !bIsUpcoming) return -1;
         if (!aIsUpcoming && bIsUpcoming) return 1;
@@ -1416,7 +1945,8 @@ class EventService {
         return b.createdAt.compareTo(a.createdAt);
       });
 
-      Logger.d('EventService', 'Search returned ${filteredEvents.length} results');
+      Logger.d(
+          'EventService', 'Search returned ${filteredEvents.length} results');
       return filteredEvents;
     } catch (e) {
       Logger.e('EventService', 'Error searching events', e);
@@ -1433,7 +1963,8 @@ class EventService {
     bool? onlyJoined,
   }) async {
     try {
-      Logger.d('EventService', 'Advanced search with filters: query=$query, activityType=$activityType, dateRange=$startDate-$endDate, onlyJoined=$onlyJoined');
+      Logger.d('EventService',
+          'Advanced search with filters: query=$query, activityType=$activityType, dateRange=$startDate-$endDate, onlyJoined=$onlyJoined');
 
       // Get base results from the simple search
       List<EventModel> results = await searchEvents(
@@ -1456,11 +1987,13 @@ class EventService {
 
       if (onlyJoined == true && _currentUserId.isNotEmpty) {
         results = results.where((event) {
-          return event.userId == _currentUserId || event.joinedBy.contains(_currentUserId);
+          return event.userId == _currentUserId ||
+              event.joinedBy.contains(_currentUserId);
         }).toList();
       }
 
-      Logger.d('EventService', 'Advanced search returned ${results.length} results');
+      Logger.d(
+          'EventService', 'Advanced search returned ${results.length} results');
       return results;
     } catch (e) {
       Logger.e('EventService', 'Error in advanced search', e);
