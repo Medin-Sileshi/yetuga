@@ -34,7 +34,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   String? _error;
 
   bool _isFollowing = false;
-  bool _isFollowLoading = false;
   int _followersCount = 0;
   int _followingCount = 0;
 
@@ -1064,7 +1063,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Widget _buildEventsContent() {
     // Get the user ID (current user or profile user)
     final userId = widget.userId ?? ref.read(currentUserProvider)?.uid;
-    final currentUserId = ref.read(currentUserProvider)?.uid;
 
     if (userId == null) {
       return const SizedBox.shrink();
@@ -1142,83 +1140,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _buildJoinedEventsSection() {
-    // Get the user ID (current user or profile user)
-    final userId = widget.userId ?? ref.read(currentUserProvider)?.uid;
-
-    if (userId == null) {
-      return const SizedBox.shrink();
-    }
-
-    // Get the event service
-    final eventService = ref.read(eventServiceProvider);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16.0),
-          child: Text(
-            'Joined Events',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-        ),
-
-        // Stream builder for joined events
-        StreamBuilder<List<EventModel>>(
-          stream: eventService.getJoinedEvents(limit: 10),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            if (snapshot.hasError) {
-              return Center(child: Text('Error: ${snapshot.error}'));
-            }
-
-            final events = snapshot.data ?? [];
-
-            if (events.isEmpty) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text('No joined events yet'),
-                ),
-              );
-            }
-
-            return ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: events.length,
-              itemBuilder: (context, index) {
-                final event = events[index];
-                return EventFeedCard(
-                  event: event,
-                  onJoin: () {
-                    // Handle join action
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content:
-                              Text('You are already joined to this event')),
-                    );
-                  },
-                  onIgnore: null, // Disable ignore button for joined events
-                  disableIgnore: true, // Gray out the ignore button
-                );
-              },
-            );
-          },
-        ),
-      ],
-    );
-  }
 
   Future<void> _handleFollowButtonPressed() async {
     if (widget.userId == null) return;
 
     setState(() {
-      _isFollowLoading = true;
     });
 
     try {
@@ -1237,7 +1163,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
         if (!confirmed) {
           setState(() {
-            _isFollowLoading = false;
           });
           return;
         }
@@ -1274,7 +1199,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       }
     } finally {
       setState(() {
-        _isFollowLoading = false;
       });
     }
   }
